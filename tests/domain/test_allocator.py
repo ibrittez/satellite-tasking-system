@@ -1,5 +1,7 @@
 import time
 
+import pytest
+
 from sat_task_system.domain.allocator import allocate
 from sat_task_system.domain.models import Task
 
@@ -25,6 +27,7 @@ def test_spec_example_assignment(spec_tasks: list[Task]):
     assert assigned_names == expected_names
 
 
+@pytest.mark.slow
 def test_allocate_finishes_within_time_budget(benchmark_tasks: list[Task]):
     """allocate() must resolve a realistic ~50-task, 10-resource list in under 5s."""
     start = time.perf_counter()
