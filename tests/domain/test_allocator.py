@@ -27,6 +27,24 @@ def test_spec_example_assignment(spec_tasks: list[Task]):
     assert assigned_names == expected_names
 
 
+def test_spec_example_with_3_satellites(spec_tasks: list[Task]):
+    """Matches the payoff-maximizing allocation from the exercise spec."""
+    total, assignments = allocate(spec_tasks, 3)
+
+    expected_names = {
+        frozenset({"high_res_capture"}),
+        frozenset({"sensor_maintenance", "comms_test"}),
+        frozenset({"fsck_disk_a"}),
+    }
+
+    assert len(assignments) == 3
+    assigned_names = frozenset(frozenset(t.name for t in group)
+                               for group in assignments)
+
+    assert assigned_names == expected_names
+    assert total == 18.0
+
+
 @pytest.mark.slow
 def test_allocate_finishes_within_time_budget(benchmark_tasks: list[Task]):
     """allocate() must resolve a realistic ~50-task, 10-resource list in under 5s."""
