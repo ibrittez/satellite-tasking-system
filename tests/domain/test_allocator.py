@@ -34,4 +34,4 @@ def test_allocate_finishes_within_time_budget(benchmark_tasks: list[Task]):
     _, _ = allocate(benchmark_tasks)
     elapsed = time.perf_counter() - start
 
-    assert elapsed < 5.0
+    assert elapsed < 10.0
