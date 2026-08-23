@@ -46,3 +46,36 @@ class Assignment:
         """Payoff this assignment yields if every task succeeds."""
         return sum(task.payoff for task in self.tasks)
 
+
+@dataclass(frozen=True, slots=True)
+class TaskResult:
+    """Outcome of one execution attempt, as reported by the satellite that ran it."""
+
+    task_name: str
+    satellite_id: int
+    success: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Summary:
+    """Fleet-wide outcome of one run."""
+
+    assignments: tuple[Assignment, ...]
+    results: tuple[TaskResult, ...]
+    skipped: tuple[Task, ...]
+
+    @property
+    def planned_payoff(self) -> float:
+        """Optimum the allocator promised, before any failure."""
+        return sum(assignment.payoff for assignment in self.assignments)
+
+    @property
+    def achieved_payoff(self) -> float:
+        """Payoff of the tasks that actually succeeded."""
+        succeeded = {result.task_name for result in self.results if result.success}
+        return sum(
+            task.payoff
+            for assignment in self.assignments
+            for task in assignment.tasks
+            if task.name in succeeded
+        )
