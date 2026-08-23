@@ -8,7 +8,7 @@ def resources_to_bitmask(resources: frozenset[int]) -> int:
     return mask
 
 
-def allocate(tasks: list[Task]) -> float:
+def allocate(tasks: list[Task]) -> tuple[float, list[list[Task]]]:
     # memoization storage
     memo: dict[tuple[int, int, int], float] = {}
 
@@ -34,4 +34,22 @@ def allocate(tasks: list[Task]) -> float:
         memo[key] = r
         return r
 
-    return best(0, 0, 0)
+    total = best(0, 0, 0)
+
+    # Reconstruction pass: replay forward, reusing the memo (all O(1) lookups)
+    # to figure out which branch matched the optimum at each step.
+    groups: list[list[Task]] = [[], []]
+    m1 = m2 = 0
+    for i, task in enumerate(tasks):
+        t_mask = resources_bitmasks[i]
+        target = best(i, m1, m2)
+
+        if not (t_mask & m1) and task.payoff + best(i + 1, m1 | t_mask, m2) == target:
+            groups[0].append(task)
+            m1 |= t_mask
+        elif not (t_mask & m2) and task.payoff + best(i + 1, m1, m2 | t_mask) == target:
+            groups[1].append(task)
+            m2 |= t_mask
+        # else: task was skipped
+
+    return total, groups
