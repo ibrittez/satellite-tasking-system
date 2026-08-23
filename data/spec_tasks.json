@@ -1,0 +1,6 @@
+[
+  { "name": "high_res_capture", "payoff": 10.0, "resources": [1, 5] },
+  { "name": "sensor_maintenance", "payoff": 1.0, "resources": [1,2] },
+  { "name": "comms_test", "payoff": 5.0, "resources": [5,6] },
+  { "name": "fsck_disk_a", "payoff": 2.0, "resources": [1, 6] }
+]
