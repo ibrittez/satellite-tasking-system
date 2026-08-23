@@ -9,7 +9,8 @@ def allocate(tasks: list[Task]) -> float:
         if i == len(tasks):
             return 0.0
 
-        key = (i, m1, m2)
+        m_lo, m_hi = sorted((m1, m2), key=sorted)
+        key = (i, m_lo, m_hi)
         if key in memo:
             return memo[key]
 
