@@ -1,4 +1,4 @@
-from sat_task_system.domain.models import Task
+from sat_task_system.domain.models import Assignment, Task
 
 
 def resources_to_bitmask(resources: frozenset[int]) -> int:
@@ -8,7 +8,7 @@ def resources_to_bitmask(resources: frozenset[int]) -> int:
     return mask
 
 
-def allocate(tasks: list[Task], sat_count: int = 2) -> tuple[float, list[list[Task]]]:
+def allocate(tasks: list[Task], sat_count: int = 2) -> tuple[float, list[Assignment]]:
     n = len(tasks)
     resources_bitmasks = [resources_to_bitmask(t.resources) for t in tasks]
     payoffs = [t.payoff for t in tasks]
@@ -60,4 +60,4 @@ def allocate(tasks: list[Task], sat_count: int = 2) -> tuple[float, list[list[Ta
                     break
         # else: task was skipped
 
-    return total, groups
+    return total, [Assignment(s, tuple(group)) for s, group in enumerate(groups)]

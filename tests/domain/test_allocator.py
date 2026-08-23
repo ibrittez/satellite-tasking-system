@@ -3,8 +3,28 @@ import time
 import pytest
 
 from sat_task_system.domain.allocator import allocate
-from sat_task_system.domain.models import Task
+from sat_task_system.domain.models import Assignment, Task
 
+from collections import Counter
+from collections.abc import Iterable
+
+
+# =======================================
+# helpers
+# =======================================
+
+def allocation_shape(assignments: list[Assignment]) -> Counter[frozenset[Task]]:
+    """The allocation as a multiset of task groups: satellites are interchangeable, so their index carries no meaning."""
+    return Counter(frozenset(a.tasks) for a in assignments)
+
+
+def expected_shape(*groups: Iterable[Task]) -> Counter[frozenset[Task]]:
+    """The same multiset, written one group per argument."""
+    return Counter(frozenset(group) for group in groups)
+
+# =======================================
+# tests
+# =======================================
 
 def test_spec_example(spec_tasks: list[Task]):
     """Matches the payoff-maximizing allocation from the exercise spec."""
@@ -14,36 +34,31 @@ def test_spec_example(spec_tasks: list[Task]):
 
 def test_spec_example_assignment(spec_tasks: list[Task]):
     """Task-per-satellite split matches the spec, regardless of which satellite index gets which group."""
+    high_res, maintenance, comms, _fsck = spec_tasks
     _, assignments = allocate(spec_tasks)
-
-    expected_names = {
-        frozenset({"high_res_capture"}),
-        frozenset({"sensor_maintenance", "comms_test"}),
-    }
-
-    assert len(assignments) == 2
-    assigned_names = frozenset(frozenset(t.name for t in group)
-                               for group in assignments)
-    assert assigned_names == expected_names
+    assert allocation_shape(assignments) == expected_shape(
+        [high_res], [maintenance, comms])
 
 
 def test_spec_example_with_3_satellites(spec_tasks: list[Task]):
     """Matches the payoff-maximizing allocation from the exercise spec."""
+    high_res, maintenance, comms, fsck = spec_tasks
     total, assignments = allocate(spec_tasks, 3)
 
-    expected_names = {
-        frozenset({"high_res_capture"}),
-        frozenset({"sensor_maintenance", "comms_test"}),
-        frozenset({"fsck_disk_a"}),
-    }
-
-    assert len(assignments) == 3
-    assigned_names = frozenset(frozenset(t.name for t in group)
-                               for group in assignments)
-
-    assert assigned_names == expected_names
+    assert allocation_shape(assignments) == expected_shape(
+        [high_res], [maintenance, comms], [fsck])
     assert total == 18.0
 
+
+def test_satellite_id_matches_list_index(spec_tasks: list[Task]):
+    """dispatch() picks an uplink queue by index, so assignment i must own satellite i."""
+    _, assignments = allocate(spec_tasks, 3)
+
+    assert [a.satellite_id for a in assignments] == [0, 1, 2]
+
+# =======================================
+# benchmark
+# =======================================
 
 @pytest.mark.slow
 def test_allocate_finishes_within_time_budget(benchmark_tasks: list[Task]):
