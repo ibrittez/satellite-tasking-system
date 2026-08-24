@@ -1,17 +1,22 @@
 .PHONY: test test-slow test-all integration clean
 
+PYTHON ?= python3
+
+PYTEST := $(PYTHON) -m pytest
+
 test:
-	pytest
+	$(PYTEST)
 
 test-slow:
-	pytest -m slow
+	$(PYTEST) -m slow
 
 test-all:
-	pytest -m ""
+	$(PYTEST) -m ""
 
 # Same tests `make test` runs, with -s so the printed report is visible.
 integration:
-	pytest tests/integration -s
+	$(PYTEST) tests/integration -s
+
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
