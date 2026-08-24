@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from sat_task_system.domain.allocator import allocate
+from sat_task_system.domain.allocator import _greedy_allocation, allocate
 from sat_task_system.domain.models import Assignment, Task
 
 from collections import Counter
@@ -106,6 +106,39 @@ def test_enough_satellites_for_every_task_skips_the_search():
     elapsed = time.perf_counter() - start
 
     assert elapsed < 1.0
+
+def test_greedy_places_every_task_when_the_fleet_can_hold_them():
+    """A chain of conflicts (each task shares a resource with the next) fits on two
+    satellites, so the greedy pass must find a full placement."""
+    tasks = [Task.create(f"t{i}", 1.0, [i, i + 1]) for i in range(6)]
+
+    groups = _greedy_allocation(tasks, 2)
+
+    assert groups is not None
+    assert sum(len(group) for group in groups) == len(tasks)
+
+
+def test_greedy_gives_up_when_a_task_fits_nowhere():
+    """Three tasks claiming the same resource need three satellites; with two, the greedy
+    pass proves nothing and must hand the problem back to the search."""
+    tasks = [Task.create(name, 1.0, [1]) for name in "abc"]
+
+    assert _greedy_allocation(tasks, 2) is None
+
+
+def test_conflict_free_tasks_skip_the_search():
+    """100 tasks sharing no resources all fit on 3 satellites, so the answer is the whole
+    payoff. The greedy pass must prove that in O(n*k) instead of searching for it."""
+    tasks = [Task.create(f"task{i}", 1.0, {i}) for i in range(100)]
+
+    start = time.perf_counter()
+    total, assignments = allocate(tasks, 3)
+    elapsed = time.perf_counter() - start
+
+    assert total == 100.0
+    assert tasks_placed(assignments) == 100
+    assert elapsed < 1.0
+
 
 # =======================================
 # benchmark

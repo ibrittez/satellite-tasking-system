@@ -12,6 +12,11 @@ class Task:
     payoff: float
     resources: frozenset[int]
 
+    def __post_init__(self) -> None:
+        if self.payoff <= 0:
+            raise ValueError(
+                f"task '{self.name}': payoff must be positive, got {self.payoff}.")
+
     @classmethod
     def create(cls, name: str, payoff: float, resources: Iterable[int]) -> "Task":
         """Build a Task from any iterable of resource ids (list/tuple/set/frozenset)."""
