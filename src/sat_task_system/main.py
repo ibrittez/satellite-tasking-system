@@ -41,7 +41,7 @@ def _satellite_processes(config: Config,
     satellites = [
         Satellite(
             sat_id,
-            config.failure_rates[sat_id],
+            config.failure_rate,
             channels.uplinks[sat_id],
             channels.downlink
         )

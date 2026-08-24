@@ -21,7 +21,8 @@ integration:
 	$(PYTEST) tests/integration -s
 
 run:
-	$(PYTHON) -m sat_task_system.main
+	$(PYTHON) -m sat_task_system.main --tasks data/spec_tasks.json $(ARGS)
+
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
