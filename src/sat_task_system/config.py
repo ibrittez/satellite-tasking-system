@@ -29,7 +29,7 @@ class Config:
 
     tasks_path: str
     sat_count: int
-    failure_rate: float
+    failure_rates: tuple[float, ...]
     collect_timeout: float
     join_timeout: float
 
@@ -38,11 +38,19 @@ class Config:
             raise ValueError(
                 f"sat_count must be at least {MIN_SAT_COUNT}, got {self.sat_count}")
 
+        # One rate per satellite, always. The broadcast form of the flag is
+        # expanded before it gets here, so the rest of the code can index.
+        if len(self.failure_rates) != self.sat_count:
+            raise ValueError(
+                f"failure_rates must hold one rate per satellite "
+                f"({self.sat_count}), got {len(self.failure_rates)}")
+
         # Closed interval: 0.0 (never fails) and 1.0 (always fails) are what the
         # satellite tests use to pin an outcome without a seed.
-        if not 0.0 <= self.failure_rate <= 1.0:
-            raise ValueError(
-                f"failure_rate must be in [0, 1], got {self.failure_rate}")
+        for sat_id, rate in enumerate(self.failure_rates):
+            if not 0.0 <= rate <= 1.0:
+                raise ValueError(
+                    f"failure_rates[{sat_id}] must be in [0, 1], got {rate}")
 
         if self.collect_timeout <= 0.0:
             raise ValueError(
@@ -58,7 +66,8 @@ class Config:
         rows = (
             ("tasks", self.tasks_path),
             ("satellites", str(self.sat_count)),
-            ("failure rate", f"{self.failure_rate:.2f}"),
+            ("failure rates", ", ".join(
+                f"{rate:.2f}" for rate in self.failure_rates)),
             ("collect timeout", f"{self.collect_timeout}s"),
             ("join timeout", f"{self.join_timeout}s"),
         )
@@ -83,22 +92,30 @@ def parse_config(argv: Sequence[str] | None = None) -> Config:
     # them here is what keeps the type checker honest at the boundary.
     tasks_path: str = args.tasks
     sat_count: int = args.sat_count
-    failure_rate: float = args.failure_rate
+    failure_rates: Sequence[float] = args.failure_rate
     collect_timeout: float = args.collect_timeout
     join_timeout: float = args.join_timeout
 
     try:
-        return Config(tasks_path, sat_count, failure_rate,
+        return Config(tasks_path, sat_count,
+                      _expand_rates(failure_rates, sat_count),
                       collect_timeout, join_timeout)
     except ValueError as error:
         parser.error(str(error))
+
+
+def _expand_rates(rates: Sequence[float], sat_count: int) -> tuple[float, ...]:
+    """A single rate covers the whole fleet. Any other count is passed through
+    untouched, so a wrong one is rejected by Config instead of here."""
+    return tuple(rates) * sat_count if len(rates) == 1 else tuple(rates)
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=PROG,
         description="Run a satellite fleet against a constrained task list maximizing payoff.",
-        epilog=f"example: {PROG} --tasks data/spec_tasks.json --sat-count 3",
+        epilog=f"example: {PROG} --tasks data/spec_tasks.json --sat-count 3 "
+               f"--failure-rate 0.1 0.2 0.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -122,10 +139,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     _ = parser.add_argument(
         "--failure-rate",
+        nargs="+",
         type=float,
-        default=FAILURE_RATE,
+        default=(FAILURE_RATE,),
         metavar="RATE",
-        help=f"probability in [0, 1] that any single task fails "
+        help=f"probability in [0, 1] that any single task fails; one value "
+             f"covers the whole fleet, or pass one per satellite "
              f"(default: {FAILURE_RATE})",
     )
 

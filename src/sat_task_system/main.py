@@ -41,15 +41,17 @@ def main() -> None:
 
 def _satellite_processes(config: Config,
                          channels: Channels) -> list[Process]:
-    """One process per satellite, each holding its own uplink and the shared downlink."""
+    """One process per satellite, each holding its own uplink, its own failure
+    rate and the shared downlink."""
+    # Config guarantees one rate per satellite, so enumerate covers the fleet.
     satellites = [
         Satellite(
             sat_id,
-            config.failure_rate,
+            failure_rate,
             channels.uplinks[sat_id],
             channels.downlink
         )
-        for sat_id in range(config.sat_count)
+        for sat_id, failure_rate in enumerate(config.failure_rates)
     ]
 
     return [Process(target=satellite.run, name=f"satellite-{sat_id}")

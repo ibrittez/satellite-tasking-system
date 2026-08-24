@@ -24,11 +24,11 @@ required; `--sat-count` defaults to 2:
 sat-task-system --tasks data/spec_tasks.json
 sat-task-system --tasks data/spec_tasks.json --sat-count 3
 sat-task-system --tasks data/spec_tasks.json --failure-rate 0.0
+sat-task-system --tasks data/spec_tasks.json --sat-count 3 --failure-rate 0.1 0.2 0.0
 sat-task-system --help
 ```
 
-`--help` lists the rest: `--failure-rate`, `--collect-timeout` and
-`--join-timeout`.
+`--failure-rate` takes either one value, applied to the whole fleet, or one per satellite.
 
 A run prints the configuration it resolved, then the summary:
 
@@ -36,7 +36,7 @@ A run prints the configuration it resolved, then the summary:
 sat-task-system
   tasks             data/spec_tasks.json
   satellites        2
-  failure rate      0.10
+  failure rates     0.10, 0.10
   collect timeout   5.0s
   join timeout      5.0s
 
@@ -56,7 +56,7 @@ planned 16.0   achieved 11.0   (2 of 3 succeeded)
 ```
 
 `planned` is what the allocation was worth, `achieved` what survived execution:
-each task fails with probability `--failure-rate`, so the two rarely match.
+each task fails with its satellite's `--failure-rate`, so the two rarely match.
 
 ### Without installing
 

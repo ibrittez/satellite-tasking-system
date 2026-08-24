@@ -17,11 +17,11 @@ USAGE_ERROR = 2
 
 def make_config(tasks_path: str = TASKS,
                 sat_count: int = 2,
-                failure_rate: float = 0.1,
+                failure_rates: tuple[float, ...] = (0.1, 0.1),
                 collect_timeout: float = 5.0,
                 join_timeout: float = 5.0) -> Config:
     """A valid Config, so each test only spells out the field it is probing."""
-    return Config(tasks_path, sat_count, failure_rate,
+    return Config(tasks_path, sat_count, failure_rates,
                   collect_timeout, join_timeout)
 
 
@@ -47,19 +47,26 @@ def test_a_fleet_below_the_minimum_is_rejected():
 
 
 def test_a_failure_rate_outside_the_unit_interval_is_rejected():
-    """A probability above 1 or below 0 is not a probability."""
-    with pytest.raises(ValueError, match="failure_rate"):
-        _ = make_config(failure_rate=1.5)
+    """A probability above 1 or below 0 is not a probability, and the offending
+    satellite is named."""
+    with pytest.raises(ValueError, match=r"failure_rates\[1\]"):
+        _ = make_config(failure_rates=(0.1, 1.5))
 
-    with pytest.raises(ValueError, match="failure_rate"):
-        _ = make_config(failure_rate=-0.1)
+    with pytest.raises(ValueError, match=r"failure_rates\[0\]"):
+        _ = make_config(failure_rates=(-0.1, 0.1))
 
 
 def test_both_ends_of_the_unit_interval_are_accepted():
     """0.0 (never fails) and 1.0 (always fails) are the values the satellite
     tests use to pin an outcome without a seed -- the interval stays closed."""
-    assert make_config(failure_rate=0.0).failure_rate == 0.0
-    assert make_config(failure_rate=1.0).failure_rate == 1.0
+    assert make_config(failure_rates=(0.0, 1.0)).failure_rates == (0.0, 1.0)
+
+
+def test_a_rate_count_other_than_one_per_satellite_is_rejected():
+    """Downstream code indexes the rates by satellite id, so the fleet and the
+    tuple must have the same size."""
+    with pytest.raises(ValueError, match="failure_rates"):
+        _ = make_config(sat_count=3, failure_rates=(0.1, 0.2))
 
 
 def test_a_non_positive_timeout_is_rejected():
@@ -79,19 +86,19 @@ def test_only_the_task_file_is_required():
     """Everything else falls back to its default."""
     config = parse_config(BASE_ARGV)
 
-    assert config == Config(TASKS, SAT_COUNT, FAILURE_RATE,
+    assert config == Config(TASKS, SAT_COUNT, (FAILURE_RATE,) * SAT_COUNT,
                             COLLECT_TIMEOUT, JOIN_TIMEOUT)
 
 
 def test_every_setting_can_be_overridden():
     """Each flag reaches its field."""
     config = parse_config([*BASE_ARGV,
-                           "--sat-count", "4",
-                           "--failure-rate", "0.3",
+                           "--sat-count", "3",
+                           "--failure-rate", "0.3", "0.0", "1.0",
                            "--collect-timeout", "2.5",
                            "--join-timeout", "1.5"])
 
-    assert config == Config(TASKS, 4, 0.3, 2.5, 1.5)
+    assert config == Config(TASKS, 3, (0.3, 0.0, 1.0), 2.5, 1.5)
 
 
 def test_a_rejected_value_exits_as_a_usage_error(capsys: pytest.CaptureFixture[str]):
