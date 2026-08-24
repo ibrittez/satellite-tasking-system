@@ -5,7 +5,8 @@ from sat_task_system.domain.models import Task, Assignment, TaskResult
 from sat_task_system.domain.summary import build_summary
 from sat_task_system.ipc.channels import Channels
 from sat_task_system.ipc.messages import ExecuteTasks, TaskExecuted
-from sat_task_system.ports import Reporter, TaskSource
+from sat_task_system.ports.reporter import Reporter
+from sat_task_system.ports.task_source import TaskSource
 
 
 class GroundStation:

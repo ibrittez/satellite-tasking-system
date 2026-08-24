@@ -3,7 +3,8 @@ from multiprocessing import Process
 from sat_task_system.config import Config, parse_config
 from sat_task_system.ipc.channels import Channels, create_channels
 from sat_task_system.loaders.json_task_source import JsonTaskSource
-from sat_task_system.ports import Reporter, TaskSource
+from sat_task_system.ports.reporter import Reporter
+from sat_task_system.ports.task_source import TaskSource
 from sat_task_system.processes.ground_station import GroundStation
 from sat_task_system.processes.satellite import Satellite
 from sat_task_system.reporting.console_reporter import ConsoleReporter

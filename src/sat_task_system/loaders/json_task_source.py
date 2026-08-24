@@ -2,7 +2,7 @@ from typing import override
 
 from sat_task_system.domain.models import Task
 from sat_task_system.loaders.json_task_loader import json_task_loader
-from sat_task_system.ports import TaskSource
+from sat_task_system.ports.task_source import TaskSource
 
 
 class JsonTaskSource(TaskSource):

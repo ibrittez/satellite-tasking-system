@@ -7,7 +7,8 @@ from typing import Any, override
 from sat_task_system.domain.models import Assignment, Summary, Task, TaskResult
 from sat_task_system.ipc.channels import Channels
 from sat_task_system.ipc.messages import ExecuteTasks, TaskExecuted
-from sat_task_system.ports import Reporter, TaskSource
+from sat_task_system.ports.reporter import Reporter
+from sat_task_system.ports.task_source import TaskSource
 from sat_task_system.processes.ground_station import GroundStation
 
 # Never reached: every result a test expects is queued before the phase runs.

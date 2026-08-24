@@ -1,7 +1,7 @@
 from typing import override
 
 from sat_task_system.domain.models import Summary, Task
-from sat_task_system.ports import Reporter
+from sat_task_system.ports.reporter import Reporter
 
 MARK_WIDTH = 7
 NAME_WIDTH = 26
