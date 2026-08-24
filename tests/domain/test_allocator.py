@@ -22,9 +22,21 @@ def expected_shape(*groups: Iterable[Task]) -> Counter[frozenset[Task]]:
     """The same multiset, written one group per argument."""
     return Counter(frozenset(group) for group in groups)
 
+
+def satellites_used(assignments: list[Assignment]) -> int:
+    """How many satellites got at least one task."""
+    return sum(1 for a in assignments if a.tasks)
+
+
+def load_spread(assignments: list[Assignment]) -> int:
+    """Gap between the busiest and the idlest satellite; 0 means perfectly even."""
+    loads = [len(a.tasks) for a in assignments]
+    return max(loads) - min(loads)
+
 # =======================================
 # tests
 # =======================================
+
 
 def test_spec_example(spec_tasks: list[Task]):
     """Matches the payoff-maximizing allocation from the exercise spec."""
@@ -56,9 +68,27 @@ def test_satellite_id_matches_list_index(spec_tasks: list[Task]):
 
     assert [a.satellite_id for a in assignments] == [0, 1, 2]
 
+
+def test_spec_example_with_4_satellites(spec_tasks: list[Task]):
+    """A 4th satellite doesn't raise the 18.0 optimum, but it must be used instead of left idle."""
+    total, assignments = allocate(spec_tasks, 4)
+
+    assert total == 18.0
+    assert satellites_used(assignments) == 4
+
+
+def test_load_evens_out_when_tasks_outnumber_satellites():
+    """Four conflict-free tasks on two satellites split evenly, not 4/0."""
+    tasks = [Task.create(name, 1.0, [i]) for i, name in enumerate("abcd")]
+
+    _, assignments = allocate(tasks, 2)
+
+    assert load_spread(assignments) == 0
+
 # =======================================
 # benchmark
 # =======================================
+
 
 @pytest.mark.slow
 def test_allocate_finishes_within_time_budget(benchmark_tasks: list[Task]):
