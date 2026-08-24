@@ -3,34 +3,65 @@ from multiprocessing import Process
 from sat_task_system.config import Config, parse_config
 from sat_task_system.ipc.channels import Channels, create_channels
 from sat_task_system.loaders.json_task_source import JsonTaskSource
+from sat_task_system.ports import Reporter, TaskSource
 from sat_task_system.processes.ground_station import GroundStation
 from sat_task_system.processes.satellite import Satellite
 from sat_task_system.reporting.console_reporter import ConsoleReporter
 
+# =======================================
+# main
+# =======================================
+
 
 def main() -> None:
     config: Config = parse_config()
-
-    task_source = JsonTaskSource(config.tasks_path)
-    reporter = ConsoleReporter()
-
     channels: Channels = create_channels(config.sat_count)
 
-    processes: list[Process] = []
-    for sat_id in range(config.sat_count):
-        processes.append(Process(target=Satellite(
-            sat_id, config.failure_rates[sat_id], channels.uplinks[sat_id], channels.downlink).run, name=f"satellite-{sat_id}"))
+    task_source: TaskSource = JsonTaskSource(config.tasks_path)
+    reporter: Reporter = ConsoleReporter()
 
-    gs: GroundStation = GroundStation(
-        source=task_source, reporter=reporter, collect_timeout=config.collect_timeout, channels=channels,
-        sat_count=config.sat_count)
-
-    processes.append(Process(target=gs.run, name='ground_station'))
+    processes: list[Process] = [
+        *_satellite_processes(config, channels),
+        _ground_station_process(config, channels, task_source, reporter),
+    ]
 
     for process in processes:
         process.start()
 
     _shutdown(processes, config.join_timeout)
+
+# =======================================
+# helpers
+# =======================================
+
+
+def _satellite_processes(config: Config,
+                         channels: Channels) -> list[Process]:
+    """One process per satellite, each holding its own uplink and the shared downlink."""
+    satellites = [
+        Satellite(
+            sat_id,
+            config.failure_rates[sat_id],
+            channels.uplinks[sat_id],
+            channels.downlink
+        )
+        for sat_id in range(config.sat_count)
+    ]
+
+    return [Process(target=satellite.run, name=f"satellite-{sat_id}")
+            for sat_id, satellite in enumerate(satellites)]
+
+
+def _ground_station_process(config: Config,
+                            channels: Channels,
+                            task_source: TaskSource,
+                            reporter: Reporter) -> Process:
+    """The station process, wired to the ports main() picked."""
+    ground_station = GroundStation(
+        source=task_source, reporter=reporter, channels=channels,
+        sat_count=config.sat_count, collect_timeout=config.collect_timeout)
+
+    return Process(target=ground_station.run, name="ground-station")
 
 
 def _shutdown(processes: list[Process], timeout: float) -> None:
@@ -42,6 +73,10 @@ def _shutdown(processes: list[Process], timeout: float) -> None:
             process.terminate()
             process.join()
 
+
+# =======================================
+# __main__
+# =======================================
 
 if __name__ == "__main__":
     main()
