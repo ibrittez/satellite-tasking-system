@@ -33,6 +33,11 @@ def load_spread(assignments: list[Assignment]) -> int:
     loads = [len(a.tasks) for a in assignments]
     return max(loads) - min(loads)
 
+
+def tasks_placed(assignments: list[Assignment]) -> int:
+    """How many tasks made it into the plan, across the whole fleet."""
+    return sum(len(a.tasks) for a in assignments)
+
 # =======================================
 # tests
 # =======================================
@@ -84,6 +89,23 @@ def test_load_evens_out_when_tasks_outnumber_satellites():
     _, assignments = allocate(tasks, 2)
 
     assert load_spread(assignments) == 0
+
+def test_enough_satellites_for_every_task_skips_the_search():
+    """One task per satellite is trivially optimal, so it must cost no search at all.
+    Both branches of the guard are exercised: as many satellites as tasks, and one more."""
+
+    task_count = 100
+    tasks: list[Task] = []
+
+    for i in range(task_count):
+        tasks.append(Task.create(f"task{i}", 1.0, {i}))
+
+    start = time.perf_counter()
+    _, _ = allocate(tasks, sat_count=task_count)
+    _, _ = allocate(tasks, sat_count=task_count+1)
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 1.0
 
 # =======================================
 # benchmark

@@ -16,6 +16,13 @@ def allocate(tasks: list[Task], sat_count: int = 2) -> tuple[float, list[Assignm
     # memoization storage. ([int, ...]: task index, then one mask per satellite).
     memo: dict[tuple[int, ...], float] = {}
 
+    # One task per satellite: no group holds two tasks, so no resource conflict
+    if sat_count >= len(tasks):
+        total = sum(task.payoff for task in tasks)
+        a = [Assignment(s, (task,)) for s, task in enumerate(tasks)]
+        a += [Assignment(s, ()) for s in range(len(tasks), sat_count)]
+        return total, a
+
     def best(i: int, sat_res: tuple[int, ...]) -> float:
         if i == n:
             return 0.0
