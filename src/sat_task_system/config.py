@@ -52,6 +52,20 @@ class Config:
             raise ValueError(
                 f"join_timeout must be positive, got {self.join_timeout}")
 
+    @override
+    def __str__(self) -> str:
+        """Startup banner. Built as one string so it lands in a single write."""
+        rows = (
+            ("tasks", self.tasks_path),
+            ("satellites", str(self.sat_count)),
+            ("failure rate", f"{self.failure_rate:.2f}"),
+            ("collect timeout", f"{self.collect_timeout}s"),
+            ("join timeout", f"{self.join_timeout}s"),
+        )
+
+        return "\n".join(
+            [PROG, *(f"  {label:<18}{value}" for label, value in rows)])
+
 
 # =======================================
 # parsing

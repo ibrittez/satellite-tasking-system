@@ -15,6 +15,9 @@ from sat_task_system.reporting.console_reporter import ConsoleReporter
 
 def main() -> None:
     config: Config = parse_config()
+
+    print(config, end="\n\n")
+
     channels: Channels = create_channels(config.sat_count)
 
     task_source: TaskSource = JsonTaskSource(config.tasks_path)
