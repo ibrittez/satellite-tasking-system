@@ -1,8 +1,11 @@
-.PHONY: test test-slow test-all integration clean
+.PHONY: test test-slow test-all integration run clean
 
 PYTHON ?= python3
 
 PYTEST := $(PYTHON) -m pytest
+
+# Exported to every recipe, so the package resolves without being installed.
+export PYTHONPATH := src
 
 test:
 	$(PYTEST)
@@ -17,6 +20,8 @@ test-all:
 integration:
 	$(PYTEST) tests/integration -s
 
+run:
+	$(PYTHON) -m sat_task_system.main
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

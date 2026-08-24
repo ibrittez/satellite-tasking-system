@@ -1,10 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "sat_task_system"
 version = "0.1.0"
+requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest"]
+
+[project.scripts]
+sat-task-system = "sat_task_system.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 addopts = "-v -m 'not slow'"
