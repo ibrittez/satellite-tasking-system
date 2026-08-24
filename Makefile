@@ -1,4 +1,7 @@
-.PHONY: test test-slow test-all integration run clean
+.PHONY: test test-slow test-all integration run clean docker-build docker-run \
+        docker-test
+
+IMAGE ?= sat-task-system
 
 PYTHON ?= python3
 
@@ -23,7 +26,17 @@ integration:
 run:
 	$(PYTHON) -m sat_task_system.main --tasks data/spec_tasks.json $(ARGS)
 
+docker-build:
+	docker build -t $(IMAGE) .
+
+docker-run:
+	docker run --rm --init $(IMAGE) $(ARGS)
+
+docker-test:
+	docker build --target test -t $(IMAGE):test .
+	docker run --rm --init $(IMAGE):test $(ARGS)
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
+	find . -type d -name "sat_task_system.egg-info" -exec rm -rf {} +

@@ -1,4 +1,7 @@
 .pytest_cache/
 __pycache__/
+src/sat_task_system.egg-info/
+build/
+.venv/
 
 .env
