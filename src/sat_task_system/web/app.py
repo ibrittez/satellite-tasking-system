@@ -13,15 +13,21 @@ from flask import Flask, render_template, request
 
 from sat_task_system.config import Config
 from sat_task_system.loaders.json_task_loader import parse_tasks
+from sat_task_system.persistence.sqlite_reporter import SqliteReporter
+from sat_task_system.persistence.sqlite_store import SqliteStore
+from sat_task_system.ports.reporter import Reporter
 from sat_task_system.processes.fleet import run_batch
 from sat_task_system.reporting.text_report import render_summary
 
 PAGE = "index.html"
+HISTORY_PAGE = "history.html"
 
 BAD_REQUEST = 400
 CONFLICT = 409
+NOT_FOUND = 404
 
 BUSY = "A run is already in flight. Wait for it to finish and submit again."
+NO_HISTORY = "No history is being recorded. Start the server with --db PATH."
 
 # =======================================
 # app
@@ -37,9 +43,23 @@ def create_app(config: Config) -> Flask:
     # report over each other. The honest small answer, a job queue is the real one.
     running = threading.Lock()
 
+    # Persistence is opt in. Without --db the app runs with no history at all,
+    # which is why every use of it is guarded rather than assumed.
+    recorder = SqliteReporter(config.db_path) if config.db_path else None
+
     @app.get("/")
     def index() -> str:
         return _page(config, _prefill(config))
+
+    @app.get("/history")
+    def history() -> str | tuple[str, int]:
+        if config.db_path is None:
+            return _page(config, _prefill(config),
+                         error=NO_HISTORY), NOT_FOUND
+
+        return render_template(HISTORY_PAGE,
+                               runs=SqliteStore(config.db_path).recent_runs(),
+                               history=True)
 
     @app.post("/")
     def submit() -> str | tuple[str, int]:
@@ -55,8 +75,10 @@ def create_app(config: Config) -> Flask:
         if not running.acquire(blocking=False):
             return _page(config, submitted, error=BUSY), CONFLICT
 
+        recorders: tuple[Reporter, ...] = () if recorder is None else (recorder,)
+
         try:
-            summary = run_batch(tasks, config)
+            summary = run_batch(tasks, config, recorders)
         finally:
             running.release()
 
@@ -85,6 +107,7 @@ def _page(config: Config,
                            tasks=submitted,
                            report=report,
                            error=error,
+                           history=config.db_path is not None,
                            sat_count=config.sat_count,
                            failure_rates=", ".join(
                                f"{rate:.2f}" for rate in config.failure_rates))
