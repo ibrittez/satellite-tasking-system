@@ -1,5 +1,5 @@
-.PHONY: test test-slow test-all integration run clean docker-build docker-run \
-        docker-test
+.PHONY: test test-slow test-all integration run web clean docker-build \
+        docker-run docker-test docker-web
 
 IMAGE ?= sat-task-system
 
@@ -26,6 +26,10 @@ integration:
 run:
 	$(PYTHON) -m sat_task_system.main --tasks data/spec_tasks.json $(ARGS)
 
+# Needs the optional dependency: pip install '.[web]'
+web:
+	$(PYTHON) -m sat_task_system.main --web --tasks data/spec_tasks.json $(ARGS)
+
 docker-build:
 	docker build -t $(IMAGE) .
 
@@ -35,6 +39,12 @@ docker-run:
 docker-test:
 	docker build --target test -t $(IMAGE):test .
 	docker run --rm --init $(IMAGE):test $(ARGS)
+
+PORT ?= 5000
+
+docker-web:
+	docker build --target web -t $(IMAGE):web .
+	docker run --rm --init -p $(PORT):5000 $(IMAGE):web $(ARGS)
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

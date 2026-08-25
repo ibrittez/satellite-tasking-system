@@ -26,7 +26,24 @@ ENTRYPOINT ["pytest"]
 CMD []
 
 # =======================================
-# runtime: default target
+# web: `docker build --target web`
+# =======================================
+
+FROM base AS web
+
+RUN pip install --no-cache-dir ".[web]"
+
+USER app
+
+EXPOSE 5000
+
+# 0.0.0.0, or the port publish reaches a server bound to the container's loopback.
+ENTRYPOINT ["sat-task-system", "--web", "--host", "0.0.0.0", \
+            "--tasks", "/app/data/spec_tasks.json"]
+CMD []
+
+# =======================================
+# runtime: default target, so it stays last
 # =======================================
 
 FROM base AS runtime
