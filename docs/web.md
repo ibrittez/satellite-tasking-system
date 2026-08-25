@@ -2,7 +2,8 @@
 
 Scope: the HTTP mode, what it reuses and the one structural decision it forced. The
 transport is covered in `docs/ipc.md`, the layering in `docs/architecture.md`, the
-allocation algorithm in `docs/allocator.md`.
+allocation algorithm in `docs/allocator.md`, and what a run leaves behind in
+`docs/persistence.md`.
 
 ## What it is
 
@@ -62,8 +63,9 @@ def run_batch(tasks: list[Task], config: Config) -> Summary:
     channels = create_channels(config.sat_count)
     satellites = satellite_processes(config.failure_rates, channels)
 
-    reporter = CapturingReporter()
-    station = GroundStation(source=InMemoryTaskSource(tasks), reporter=reporter, ...)
+    capture = CapturingReporter()
+    station = GroundStation(source=InMemoryTaskSource(tasks),
+                            reporter=MultiReporter((capture, *reporters)), ...)
 
     for process in satellites:
         process.start()
@@ -73,12 +75,17 @@ def run_batch(tasks: list[Task], config: Config) -> Summary:
     finally:
         shutdown(satellites, config.join_timeout)
 
-    return reporter.summary
+    return capture.summary
 ```
 
 The `finally` is what keeps a server alive across a failed run: an exception inside the
 station would otherwise leave N satellites blocked on their uplinks for the lifetime of the
 process, and the next submission would add N more.
+
+`reporters` is how a caller adds destinations without giving up the summary it needs back.
+The web mode passes the SQLite recorder there when a history file is configured, and the
+capture stays first in the list, so the summary is in hand before anything durable is
+attempted with it.
 
 Each submission builds its own channels and its own fleet. Satellites stay single batch, so
 no receive loop and no shutdown message are needed on the satellite side.
@@ -153,6 +160,20 @@ like, and the web output is byte for byte what the terminal shows.
 That is the whole reason the layout was extracted out of `ConsoleReporter`. A second
 formatter would have been a second thing to keep in sync with the first.
 
+## History
+
+`GET /history` lists the recorded runs, newest first, each expandable into the tasks it
+accounted for. It is a second read of the same store the recorder writes to, described in
+`docs/persistence.md`.
+
+The whole feature is guarded by one condition, `config.db_path is not None`: with no history
+file the nav link is not rendered, and the route answers that nothing is being recorded
+rather than showing an empty page that looks like a lost history.
+
+Both pages extend `templates/base.html`, which carries the styles, the header and the nav.
+The alternative was one self-contained page per route, which duplicates the styles and lets
+the two drift apart.
+
 ## Mode selection
 
 `config.py` carries the mode as data, so nothing downstream branches on a flag:
@@ -161,6 +182,7 @@ formatter would have been a second thing to keep in sync with the first.
 | ------------------- | ----------------------------------------------------------- |
 | `--cli` (default)   | one batch from `--tasks`, report on stdout                  |
 | `--web`             | serve the page on `--host` / `--port`                       |
+| `--db`              | record every run in that SQLite file, and serve `/history`   |
 
 `--tasks` is required in `cli` mode only, and `Config.__post_init__` is what enforces it,
 alongside the other rules. In `web` mode the flag is the initial content of the box and
@@ -181,14 +203,14 @@ source tree and from an installed package.
 
 The image gets a `web` stage of its own, so the default runtime image stays free of Flask.
 It binds `0.0.0.0`, since a server bound to the container's loopback is unreachable from a
-published port.
+published port, and it records to a directory created for the unprivileged user it runs as:
+`/app` belongs to root, so a history file placed there could not be written.
 
 ## Limits
 
 - The development server. Suitable for driving a local fleet, not for concurrent users;
   the one-run-at-a-time rule is the ceiling anyway.
-- No history. A run is reported to the client that asked for it and then forgotten, since
-  nothing persists a `Summary`. The `Reporter` port is where a persisting implementation
-  would attach, next to the capturing one.
+- History is opt in, and is the most recent runs of one file with no pruning and no
+  pagination. Its own limits are in `docs/persistence.md`.
 - Long lists are answered synchronously: the request stays open for as long as the search
   and the execution take, and the allocation limits in `docs/allocator.md` apply unchanged.
