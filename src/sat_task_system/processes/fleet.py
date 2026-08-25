@@ -7,9 +7,11 @@ from sat_task_system.config import Config
 from sat_task_system.domain.models import Summary, Task
 from sat_task_system.ipc.channels import Channels, create_channels
 from sat_task_system.loaders.in_memory_task_source import InMemoryTaskSource
+from sat_task_system.ports.reporter import Reporter
 from sat_task_system.processes.ground_station import GroundStation
 from sat_task_system.processes.satellite import Satellite
 from sat_task_system.reporting.capturing_reporter import CapturingReporter
+from sat_task_system.reporting.multi_reporter import MultiReporter
 
 # =======================================
 # processes
@@ -50,20 +52,25 @@ def shutdown(processes: Sequence[Process], timeout: float) -> None:
 # =======================================
 
 
-def run_batch(tasks: list[Task], config: Config) -> Summary:
+def run_batch(tasks: list[Task],
+              config: Config,
+              reporters: Sequence[Reporter] = ()) -> Summary:
     """Plan, dispatch and collect one batch, and return what it produced.
 
     The station runs here, in the caller's process, which is what makes the
     summary readable on return: a Reporter publishing inside a child process
     could not hand it back. The satellites are still processes of their own, so
     the fleet is the same one the cli mode drives.
+
+    Any reporter passed in is published to as well, after the capture, so a
+    caller that needs the summary back does not give up the port to get it.
     """
     channels = create_channels(config.sat_count)
     satellites = satellite_processes(config.failure_rates, channels)
 
-    reporter = CapturingReporter()
+    capture = CapturingReporter()
     station = GroundStation(source=InMemoryTaskSource(tasks),
-                            reporter=reporter,
+                            reporter=MultiReporter((capture, *reporters)),
                             collect_timeout=config.collect_timeout,
                             channels=channels,
                             sat_count=config.sat_count)
@@ -77,4 +84,4 @@ def run_batch(tasks: list[Task], config: Config) -> Summary:
     finally:
         shutdown(satellites, config.join_timeout)
 
-    return reporter.summary
+    return capture.summary

@@ -47,6 +47,7 @@ class Config:
     mode: str = MODE_CLI
     host: str = HOST
     port: int = PORT
+    db_path: str | None = None
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -57,6 +58,11 @@ class Config:
         # takes its tasks from the request, so a path there is only a prefill.
         if self.mode == MODE_CLI and self.tasks_path is None:
             raise ValueError(f"tasks_path is required in {MODE_CLI} mode")
+
+        # Rejected rather than ignored: a flag that silently does nothing is
+        # worse than one that says where it applies.
+        if self.mode == MODE_CLI and self.db_path is not None:
+            raise ValueError(f"db_path only applies in {MODE_WEB} mode")
 
         if not MIN_PORT <= self.port <= MAX_PORT:
             raise ValueError(
@@ -103,6 +109,7 @@ class Config:
 
         if self.mode == MODE_WEB:
             rows.insert(1, ("listening on", f"http://{self.host}:{self.port}"))
+            rows.insert(3, ("history", self.db_path or "not recorded"))
 
         return "\n".join(
             [PROG, *(f"  {label:<18}{value}" for label, value in rows)])
@@ -130,11 +137,12 @@ def parse_config(argv: Sequence[str] | None = None) -> Config:
     mode: str = args.mode
     host: str = args.host
     port: int = args.port
+    db_path: str | None = args.db
 
     try:
         return Config(tasks_path, sat_count,
                       _expand_rates(failure_rates, sat_count),
-                      collect_timeout, join_timeout, mode, host, port)
+                      collect_timeout, join_timeout, mode, host, port, db_path)
     except ValueError as error:
         parser.error(str(error))
 
@@ -191,6 +199,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=HOST,
         metavar="ADDRESS",
         help=f"address the {MODE_WEB} mode binds to (default: {HOST})",
+    )
+
+    _ = parser.add_argument(
+        "--db",
+        default=None,
+        metavar="PATH",
+        help=f"SQLite file to accumulate the runs in, readable at /history; "
+             f"{MODE_WEB} mode only, and nothing is recorded without it",
     )
 
     _ = parser.add_argument(
