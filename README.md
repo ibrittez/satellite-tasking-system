@@ -207,6 +207,18 @@ make test-all      # everything
 make docker-test   # the same suite inside the image, on a clean Python 3.12
 ```
 
+## Authoring
+
+The web interface bonus was written by [Claude Code](https://claude.com/claude-code), an AI
+agent, working from a design agreed beforehand: `src/sat_task_system/web/`, the fleet
+orchestration in `processes/fleet.py`, the two port adapters it needed
+(`CapturingReporter`, `InMemoryTaskSource`), the extraction of `reporting/text_report.py`,
+and the mode flags in `config.py` and `main.py`.
+
+Everything else was written by hand, with the agent used for design discussion and review:
+the allocator and its documentation, the domain model, the IPC layer, both processes, the
+loaders and the reporting.
+
 ## Design Decisions
 
 This section summarizes the decisions and the reasoning behind them. The detail lives in
