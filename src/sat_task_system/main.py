@@ -5,8 +5,8 @@ from sat_task_system.ipc.channels import Channels, create_channels
 from sat_task_system.loaders.json_task_source import JsonTaskSource
 from sat_task_system.ports.reporter import Reporter
 from sat_task_system.ports.task_source import TaskSource
+from sat_task_system.processes.fleet import satellite_processes, shutdown
 from sat_task_system.processes.ground_station import GroundStation
-from sat_task_system.processes.satellite import Satellite
 from sat_task_system.reporting.console_reporter import ConsoleReporter
 
 # =======================================
@@ -19,43 +19,39 @@ def main() -> None:
 
     print(config, end="\n\n")
 
+    _run_once(config)
+
+# =======================================
+# process runners
+# =======================================
+
+
+def _run_once(config: Config) -> None:
+    """One batch from the task file, station and satellites each in their own
+    process, report on stdout."""
+    # Config guarantees a path in cli mode; this is the narrowing, not a check.
+    if config.tasks_path is None:
+        raise ValueError("cli mode reached without a task file")
+
     channels: Channels = create_channels(config.sat_count)
 
     task_source: TaskSource = JsonTaskSource(config.tasks_path)
     reporter: Reporter = ConsoleReporter()
 
     processes: list[Process] = [
-        *_satellite_processes(config, channels),
+        *satellite_processes(config.failure_rates, channels),
         _ground_station_process(config, channels, task_source, reporter),
     ]
 
     for process in processes:
         process.start()
 
-    _shutdown(processes, config.join_timeout)
+    shutdown(processes, config.join_timeout)
+
 
 # =======================================
 # helpers
 # =======================================
-
-
-def _satellite_processes(config: Config,
-                         channels: Channels) -> list[Process]:
-    """One process per satellite, each holding its own uplink, its own failure
-    rate and the shared downlink."""
-    # Config guarantees one rate per satellite, so enumerate covers the fleet.
-    satellites = [
-        Satellite(
-            sat_id,
-            failure_rate,
-            channels.uplinks[sat_id],
-            channels.downlink
-        )
-        for sat_id, failure_rate in enumerate(config.failure_rates)
-    ]
-
-    return [Process(target=satellite.run, name=f"satellite-{sat_id}")
-            for sat_id, satellite in enumerate(satellites)]
 
 
 def _ground_station_process(config: Config,
@@ -68,16 +64,6 @@ def _ground_station_process(config: Config,
         sat_count=config.sat_count, collect_timeout=config.collect_timeout)
 
     return Process(target=ground_station.run, name="ground-station")
-
-
-def _shutdown(processes: list[Process], timeout: float) -> None:
-    """Wait for a clean exit, then kill whatever is still blocked on a queue."""
-    for process in processes:
-        process.join(timeout=timeout)
-
-        if process.is_alive():
-            process.terminate()
-            process.join()
 
 
 # =======================================
