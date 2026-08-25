@@ -59,6 +59,9 @@ Requires Python 3.12+. The system itself has no runtime dependencies; the option
 - **Two front ends over the same core.** A command line run that prints the report, and a
   web page that runs one fleet per submission. The task source and the reporter are ports,
   so neither the allocator nor the processes know which one is in play.
+- **Run history on SQLite.** Optional, and it needs no new seam: recording a finished run is
+  another implementation of the reporter port, composed alongside the one that answers the
+  request. The web page reads the accumulated runs back.
 - **Tested and containerized.** Unit tests down to each phase of the station, an
   integration pass over the whole chain, an allocator benchmark, and images for running
   the fleet, the suite, or the web interface.
@@ -151,6 +154,7 @@ pip install '.[web]'
 
 sat-task-system --web                                    # empty box
 sat-task-system --web --tasks data/spec_tasks.json       # box opens prefilled
+sat-task-system --web --db runs.db                       # and keep every run
 sat-task-system --web --port 8080 --sat-count 4 --failure-rate 0.0
 ```
 
@@ -159,6 +163,7 @@ Then open <http://127.0.0.1:5000>.
 | flag                                    | meaning in web mode                                          |
 | --------------------------------------- | ------------------------------------------------------------ |
 | `--tasks`                               | optional, and only the initial content of the box             |
+| `--db`                                  | SQLite file to accumulate the runs in, off when absent        |
 | `--host`, `--port`                      | where the server binds, `127.0.0.1:5000` by default           |
 | `--sat-count`, `--failure-rate`         | the fleet every submission is run against                     |
 | `--collect-timeout`, `--join-timeout`   | same meaning as on the command line                           |
@@ -168,12 +173,38 @@ comes back in the right panel. A malformed list is answered with the parser's ow
 and starts no process. One run at a time, so a submission arriving while another is in
 flight is refused rather than queued.
 
+### Run history
+
+With `--db PATH`, every run is recorded and a **history** link appears in the header.
+`/history` lists the recent runs, newest first, each one expandable into the tasks it
+accounted for, with the outcome of each and what was skipped:
+
+```bash
+make web                     # already passes --db runs.db
+sat-task-system --web --db runs.db --tasks data/spec_tasks.json
+```
+
+The file is created on the first run it records. Without `--db` nothing is stored and the
+link is not shown. The schema and the queries are described in
+[`docs/persistence.md`](docs/persistence.md).
+
 In Docker, published on port 5000:
 
 ```bash
 make docker-web
 make docker-web PORT=8080
 ```
+
+The image records to `/app/history/runs.db`, a directory the container's own user owns, so
+the history works out of the box and is discarded with the container. Mount that directory
+to keep it across runs:
+
+```bash
+docker run --rm --init -p 5000:5000 -v "$PWD/history:/app/history" sat-task-system:web
+```
+
+The host directory has to be writable by the container's user, which is uid 1000. Pass
+`--user "$(id -u)"` if yours differs.
 
 ### Without installing
 

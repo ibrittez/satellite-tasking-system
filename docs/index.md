@@ -9,6 +9,8 @@ The README states the design decisions in summary form. These documents carry th
 | [allocator.md](allocator.md)                                         | the allocation algorithm, stage by stage, with the diff of each stage |
 | [allocator_load_spread_example.md](allocator_load_spread_example.md) | worked example of the reconstruction pass, iteration by iteration     |
 | [web.md](web.md)                                                     | the HTTP mode: where the station runs, what it reuses, its limits     |
+| [persistence.md](persistence.md)                                     | run history: the schema, the store, and how it attaches to a port     |
 
 Suggested order: `architecture.md` for the shape of the system, `ipc.md` for how the
-processes talk, `allocator.md` for the algorithm, `web.md` for the second front end.
+processes talk, `allocator.md` for the algorithm, then `web.md` and `persistence.md` for the
+second front end and what it records.

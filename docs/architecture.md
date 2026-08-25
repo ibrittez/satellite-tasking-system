@@ -51,6 +51,7 @@ neither is hardcoded into the station.
 | `ports/`     | the two abstract edges     | `domain/`                     |
 | `loaders/`   | task input adapters        | `domain/`, `ports/`           |
 | `reporting/` | summary output adapters    | `domain/`, `ports/`           |
+| `persistence/` | run history on SQLite    | `domain/`, `ports/`           |
 | `ipc/`       | transport mechanism        | `domain/`                     |
 | `config.py`  | runtime configuration      | nothing from this project     |
 | `processes/` | the actors, orchestration  | all of the above              |
@@ -154,15 +155,15 @@ station = GroundStation(
 There are two such places, one per front end, and the pair is the only difference between
 them:
 
-| edge         | command line        | HTTP                   |
-| ------------ | ------------------- | ---------------------- |
-| `TaskSource` | `JsonTaskSource`    | `InMemoryTaskSource`   |
-| `Reporter`   | `ConsoleReporter`   | `CapturingReporter`    |
+| edge         | command line        | HTTP                                    |
+| ------------ | ------------------- | --------------------------------------- |
+| `TaskSource` | `JsonTaskSource`    | `InMemoryTaskSource`                    |
+| `Reporter`   | `ConsoleReporter`   | `CapturingReporter` + `SqliteReporter`  |
 
 The station holds the abstract types, so a different source of tasks or a different
 destination for the summary is a new class plus one line of wiring, with no change to the
-orchestration. Adding the second front end changed no line of `GroundStation`. Nothing in the station constrains how many destinations a `Reporter` writes
-to either, since a `Reporter` that forwards to other reporters satisfies the same contract.
+orchestration. Adding the second front end changed no line of `GroundStation`.
+
 
 Both edges are abstract classes rather than injected callables for a concrete reason: on a
 command line run the station runs in a child process, so under the `spawn` start method it
