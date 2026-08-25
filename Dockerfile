@@ -33,13 +33,18 @@ FROM base AS web
 
 RUN pip install --no-cache-dir ".[web]"
 
+# The history file is written at runtime, and /app belongs to root: without a
+# directory the unprivileged user owns, the first recorded run fails on write.
+RUN mkdir history && chown app history
+
 USER app
 
 EXPOSE 5000
 
 # 0.0.0.0, or the port publish reaches a server bound to the container's loopback.
 ENTRYPOINT ["sat-task-system", "--web", "--host", "0.0.0.0", \
-            "--tasks", "/app/data/spec_tasks.json"]
+            "--tasks", "/app/data/spec_tasks.json", \
+            "--db", "/app/history/runs.db"]
 CMD []
 
 # =======================================
