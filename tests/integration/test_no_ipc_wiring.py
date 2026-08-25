@@ -12,6 +12,7 @@ from sat_task_system.domain.models import Assignment, TaskResult
 from sat_task_system.domain.summary import build_summary
 from sat_task_system.loaders.json_task_source import JsonTaskSource
 from sat_task_system.reporting.console_reporter import ConsoleReporter
+from sat_task_system.reporting.text_report import render_summary
 
 SAT_COUNT = 2
 FAILING = {"high_res_capture"}
@@ -43,6 +44,6 @@ def test_full_chain_without_ipc(spec_tasks_json: Path):
     assert [task.name for task in summary.skipped] == ["fsck_disk_a"]
 
     # Every task reaches the report, the skipped one included.
-    report = reporter.render(summary)
+    report = render_summary(summary)
     for task in tasks:
         assert task.name in report

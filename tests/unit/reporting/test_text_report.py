@@ -1,5 +1,5 @@
 from sat_task_system.domain.models import Assignment, Summary, Task, TaskResult
-from sat_task_system.reporting.console_reporter import ConsoleReporter
+from sat_task_system.reporting.text_report import render_summary
 
 # Update these two if the success/failure markers change.
 OK_MARK = "OK"
@@ -51,7 +51,7 @@ def test_every_dispatched_task_is_listed_with_its_outcome(spec_tasks: list[Task]
     """Each assigned task gets its own line, flagged by whether it succeeded."""
     capture, maintenance, comms, _ = spec_tasks
 
-    report = ConsoleReporter().render(spec_summary(spec_tasks))
+    report = render_summary(spec_summary(spec_tasks))
 
     assert FAIL_MARK in line_with(report, capture.name)
     assert OK_MARK in line_with(report, maintenance.name)
@@ -62,7 +62,7 @@ def test_skipped_tasks_and_payoff_totals_are_reported(spec_tasks: list[Task]):
     """The report shows what no satellite could take, and planned next to achieved."""
     *_, fsck = spec_tasks
 
-    report = ConsoleReporter().render(spec_summary(spec_tasks))
+    report = render_summary(spec_summary(spec_tasks))
 
     assert fsck.name in report
     # Compared as whitespace-split tokens: "6.0" is a substring of "16.0".
@@ -76,7 +76,7 @@ def test_each_task_row_shows_the_resources_it_claims(spec_tasks: list[Task]):
     verifiable by eye, and why fsck_disk_a fits nowhere."""
     capture, _, _, fsck = spec_tasks
 
-    report = ConsoleReporter().render(spec_summary(spec_tasks))
+    report = render_summary(spec_summary(spec_tasks))
 
     assert "{1, 5}" in line_with(report, capture.name)
     assert "{1, 6}" in line_with(report, fsck.name)
@@ -94,7 +94,7 @@ def test_resource_ids_are_listed_in_ascending_order():
         skipped=(),
     )
 
-    report = ConsoleReporter().render(summary)
+    report = render_summary(summary)
 
     assert "{1, 8}" in line_with(report, scan.name)
 
@@ -102,7 +102,7 @@ def test_resource_ids_are_listed_in_ascending_order():
 def test_the_counts_line_splits_the_loaded_task_list(spec_tasks: list[Task]):
     """Assigned and skipped are reported against the total, so 1 skipped of 4
     reads as a proportion instead of as a lone section."""
-    report = ConsoleReporter().render(spec_summary(spec_tasks))
+    report = render_summary(spec_summary(spec_tasks))
 
     counts = line_with(report, "assigned")
     assert "4 tasks" in counts
@@ -113,7 +113,7 @@ def test_the_counts_line_splits_the_loaded_task_list(spec_tasks: list[Task]):
 
 def test_the_totals_line_reports_how_many_tasks_succeeded(spec_tasks: list[Task]):
     """The failure count is what explains a gap between planned and achieved."""
-    report = ConsoleReporter().render(spec_summary(spec_tasks))
+    report = render_summary(spec_summary(spec_tasks))
 
     assert "2 of 3" in line_with(report, "planned")
 
@@ -122,7 +122,7 @@ def test_the_skipped_section_is_omitted_when_nothing_was_skipped(
         spec_tasks: list[Task]):
     """No empty heading: the section only appears when it has rows to show.
     Matched on the heading, since the counts line still says `0 skipped`."""
-    report = ConsoleReporter().render(clean_summary(spec_tasks))
+    report = render_summary(clean_summary(spec_tasks))
 
     assert "skipped:" not in report
     assert "0 skipped" in line_with(report, "assigned")
