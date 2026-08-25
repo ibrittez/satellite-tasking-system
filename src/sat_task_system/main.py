@@ -1,6 +1,6 @@
 from multiprocessing import Process
 
-from sat_task_system.config import Config, parse_config
+from sat_task_system.config import MODE_WEB, Config, parse_config
 from sat_task_system.ipc.channels import Channels, create_channels
 from sat_task_system.loaders.json_task_source import JsonTaskSource
 from sat_task_system.ports.reporter import Reporter
@@ -8,6 +8,9 @@ from sat_task_system.ports.task_source import TaskSource
 from sat_task_system.processes.fleet import satellite_processes, shutdown
 from sat_task_system.processes.ground_station import GroundStation
 from sat_task_system.reporting.console_reporter import ConsoleReporter
+
+WEB_MISSING = ("--web needs Flask, which is an optional dependency: "
+               "pip install '.[web]'")
 
 # =======================================
 # main
@@ -19,10 +22,14 @@ def main() -> None:
 
     print(config, end="\n\n")
 
-    _run_once(config)
+    if config.mode == MODE_WEB:
+        _serve(config)
+    else:
+        _run_once(config)
+
 
 # =======================================
-# process runners
+# modes
 # =======================================
 
 
@@ -47,6 +54,17 @@ def _run_once(config: Config) -> None:
         process.start()
 
     shutdown(processes, config.join_timeout)
+
+
+def _serve(config: Config) -> None:
+    """Hand over to the web mode. Imported here, not at module level, so the cli
+    keeps working without the optional dependency installed."""
+    try:
+        from sat_task_system.web.app import serve
+    except ImportError as error:
+        raise SystemExit(WEB_MISSING) from error
+
+    serve(config)
 
 
 # =======================================
