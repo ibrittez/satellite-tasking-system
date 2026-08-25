@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>satellite tasking system</title>
+  <style>
+    :root {
+      --bg: #12151a;
+      --panel: #1a1f27;
+      --line: #2b323d;
+      --text: #d7dde5;
+      --muted: #7c8798;
+      --accent: #5aa9e6;
+      --bad: #e06c75;
+      --good: #98c379;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 2rem;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 system-ui, sans-serif;
+    }
+
+    header {
+      max-width: 1200px;
+      margin: 0 auto 1.5rem;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      margin: 0 0 .25rem;
+    }
+
+    .fleet {
+      color: var(--muted);
+      margin: 0;
+    }
+
+    nav {
+      margin-top: .5rem;
+      display: flex;
+      gap: 1rem;
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+
+    nav a:hover {
+      color: var(--text);
+    }
+
+    nav a.here {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      align-items: start;
+    }
+
+    main.single {
+      grid-template-columns: 1fr;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+
+    h2 {
+      font-size: .8rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin: 0 0 .75rem;
+    }
+
+    textarea {
+      width: 100%;
+      height: 26rem;
+      resize: vertical;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: .75rem;
+      font: 13px/1.5 ui-monospace, monospace;
+    }
+
+    button {
+      margin-top: .75rem;
+      padding: .5rem 1.25rem;
+      background: var(--accent);
+      color: #0d1117;
+      border: 0;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: var(--line);
+      color: var(--muted);
+      cursor: progress;
+    }
+
+    pre {
+      margin: 0;
+      overflow-x: auto;
+      font: 13px/1.5 ui-monospace, monospace;
+    }
+
+    .error {
+      color: var(--bad);
+      white-space: pre-wrap;
+    }
+
+    .empty {
+      color: var(--muted);
+    }
+
+    /* history */
+
+    details {
+      border-top: 1px solid var(--line);
+      padding: .5rem 0;
+    }
+
+    details:first-of-type {
+      border-top: 0;
+    }
+
+    summary {
+      cursor: pointer;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font: 13px/1.5 ui-monospace, monospace;
+    }
+
+    summary .when {
+      color: var(--muted);
+      min-width: 15rem;
+    }
+
+    table {
+      width: 100%;
+      margin-top: .75rem;
+      border-collapse: collapse;
+      font: 13px/1.5 ui-monospace, monospace;
+    }
+
+    th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 400;
+      text-transform: uppercase;
+      font-size: .7rem;
+      letter-spacing: .08em;
+    }
+
+    th,
+    td {
+      padding: .2rem .75rem .2rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    td.num {
+      text-align: right;
+    }
+
+    .ok {
+      color: var(--good);
+    }
+
+    .failed {
+      color: var(--bad);
+    }
+
+    .skipped {
+      color: var(--muted);
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>satellite tasking system</h1>
+    {% block subtitle %}{% endblock %}
+    {% if history %}
+    <nav>
+      <a href="/" class="{{ 'here' if page == 'run' }}">run</a>
+      <a href="/history" class="{{ 'here' if page == 'history' }}">history</a>
+    </nav>
+    {% endif %}
+  </header>
+
+  {% block main %}{% endblock %}
+</body>
+
+</html>

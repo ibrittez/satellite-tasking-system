@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set page = "run" %}
+
+{% block subtitle %}
+<p class="fleet">{{ sat_count }} satellites &middot; failure rates {{ failure_rates }}</p>
+{% endblock %}
+
+{% block main %}
+<main>
+  <section>
+    <h2>tasks</h2>
+    <form method="post" id="run">
+      <textarea name="tasks" spellcheck="false"
+        placeholder='[{"name": "high_res_capture", "payoff": 10.0, "resources": [1, 5]}]'>{{ tasks }}</textarea>
+      <button type="submit">run</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>report</h2>
+    <div id="report">
+      {% if error %}
+      <pre class="error">{{ error }}</pre>
+      {% elif report %}
+      <pre>{{ report }}</pre>
+      {% else %}
+      <p class="empty">Paste a task list and press run.</p>
+      {% endif %}
+    </div>
+  </section>
+</main>
+
+<script>
+  // The response replaces the whole page, so without this the previous report
+  // stays on screen for the length of the run and reads as the new one.
+  document.getElementById("run").addEventListener("submit", (event) => {
+    document.getElementById("report").innerHTML =
+      '<p class="empty">Running the fleet...</p>';
+
+    // The server serves one run at a time; this is the same rule, said early.
+    const button = event.target.querySelector("button");
+    button.disabled = true;
+    button.textContent = "running";
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,481 @@
+# `satellite-tasking-system`
+
+Given a set of tasks, each with a payoff and a set of mutually exclusive resources, and a
+fleet of `N` satellites, it computes the assignment that maximizes total payoff, then
+executes it.
+
+A GroundStation reads the task list from an external file, allocates it, and dispatches
+one batch per satellite. Each satellite runs in its own OS process, executes its batch and
+reports back. The GroundStation prints a summary.
+
+```mermaid
+flowchart LR
+    main["main.py<br/>creates queues · spawn · join"]
+
+    src[/"TaskSource"/]
+    GS["GroundStation<br/>fetch → schedule → dispatch<br/>→ collect → report"]
+    rep[/"Reporter"/]
+
+    u0[["uplink[0]"]]
+    u1[["uplink[1]"]]
+    dn[["downlink (shared)"]]
+
+    sat0["sat0"]
+    sat1["sat1"]
+
+    main -.->|spawn| GS
+    main -.->|spawn| sat0
+    main -.->|spawn| sat1
+
+    src --> GS
+    GS --> rep
+
+    GS --> u0 --> sat0
+    GS --> u1 --> sat1
+    sat0 --> dn
+    sat1 --> dn
+    dn --> GS
+```
+
+Requires Python 3.12+. The system itself has no runtime dependencies; the optional
+[web interface](#web-interface) adds Flask.
+
+## Features
+
+- **Exact allocation** Dynamic programming over resource bitmasks returns the maximum
+  achievable payoff, with two shortcuts that answer the easy shapes in linear time.
+  Measured limits are in [Design Decisions](#allocation-algorithm).
+- **Fleet size configurable at startup.** Any `N >= 2`, each satellite a process of its
+  own, with an execution failure probability that can be set per satellite.
+- **Load spread across the fleet.** When several placements tie at the optimum, the
+  allocator keeps the one that leaves the fleet most evenly loaded.
+- **Task lists from outside the code.** A JSON file, or a list submitted through the web
+  page. Every entry is validated, and a rejection names the offending field.
+- **No shared state and no locks.** Resource exclusivity is decided before execution, so
+  the processes only exchange messages over queues.
+- **Bounded collection.** The station knows how many results to expect before it dispatches
+  anything, and every read carries a timeout, so a satellite that dies costs the run its
+  payoff instead of its report.
+- **Two front ends over the same core.** A command line run that prints the report, and a
+  web page that runs one fleet per submission. The task source and the reporter are ports,
+  so neither the allocator nor the processes know which one is in play.
+- **Run history on SQLite.** Optional, and it needs no new seam: recording a finished run is
+  another implementation of the reporter port, composed alongside the one that answers the
+  request. The web page reads the accumulated runs back.
+- **Tested and containerized.** Unit tests down to each phase of the station, an
+  integration pass over the whole chain, an allocator benchmark, and images for running
+  the fleet, the suite, or the web interface.
+
+## The problem
+
+A task has a `payoff` and a set of exclusive resource ids. A satellite cannot hold two
+tasks sharing a resource id; the constraint is per satellite, so two tasks sharing a
+resource can still both run if they go to different satellites.
+
+Given `N` satellites, choose which tasks run and on which satellite so that the total
+payoff of the tasks that run is maximum. Tasks that fit nowhere are dropped.
+
+With two satellites:
+
+| task                 | payoff | resources |
+| -------------------- | ------ | --------- |
+| `high_res_capture`   | 10     | {1, 5}    |
+| `sensor_maintenance` | 1      | {1, 2}    |
+| `comms_test`         | 5      | {5, 6}    |
+| `fsck_disk_a`        | 2      | {1, 6}    |
+
+Optimum is 16: `high_res_capture` on one satellite, `sensor_maintenance` + `comms_test` on
+the other. `fsck_disk_a` is dropped; any allocation including it is worth at most 12.
+
+Execution is simulated: each task fails with a configurable probability, so the achieved
+payoff is usually below the planned one. The designed algorithm is
+explained in [Design Decisions](#design-decisions) section.
+
+## Install
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install .          # pip install '.[web]' to get the web interface too
+```
+
+## Usage
+
+The install puts a `sat-task-system` command on your PATH. It runs one batch and prints
+the report; `--tasks` is required in this mode and `--sat-count` defaults to 2:
+
+```bash
+sat-task-system --tasks data/spec_tasks.json
+sat-task-system --tasks data/spec_tasks.json --sat-count 3
+sat-task-system --tasks data/spec_tasks.json --failure-rate 0.0
+sat-task-system --tasks data/spec_tasks.json --sat-count 3 --failure-rate 0.1 0.2 0.0
+sat-task-system --help
+```
+
+`--failure-rate` takes either one value, applied to the whole fleet, or one per satellite.
+
+A run prints the configuration it resolved, then the summary:
+
+```
+sat-task-system
+  mode              cli
+  tasks             data/spec_tasks.json
+  satellites        2
+  failure rates     0.10, 0.10
+  collect timeout   5.0s
+  join timeout      5.0s
+
+4 tasks, 3 assigned across 2 satellites, 1 skipped
+
+                                    payoff   resources
+satellite 0:
+  [OK]   high_res_capture             10.0   {1, 5}
+satellite 1:
+  [OK]   sensor_maintenance            1.0   {1, 2}
+  [FAIL] comms_test                    5.0   {5, 6}
+
+skipped:
+         fsck_disk_a                   2.0   {1, 6}
+
+planned 16.0   achieved 11.0   (2 of 3 succeeded)
+```
+
+`planned` is what the allocation was worth, `achieved` what survived execution:
+each task fails with its satellite's `--failure-rate`, so the two rarely match.
+
+### Web interface
+
+`--web` serves a page instead of running once: paste a task list on the left, press run,
+read the report on the right. It is the same report the command line prints, produced by
+the same fleet. Flask is not a runtime dependency, so it comes as an extra:
+
+```bash
+pip install '.[web]'
+
+sat-task-system --web                                    # empty box
+sat-task-system --web --tasks data/spec_tasks.json       # box opens prefilled
+sat-task-system --web --db runs.db                       # and keep every run
+sat-task-system --web --port 8080 --sat-count 4 --failure-rate 0.0
+```
+
+Then open <http://127.0.0.1:5000>.
+
+| flag                                    | meaning in web mode                                          |
+| --------------------------------------- | ------------------------------------------------------------ |
+| `--tasks`                               | optional, and only the initial content of the box             |
+| `--db`                                  | SQLite file to accumulate the runs in, off when absent        |
+| `--host`, `--port`                      | where the server binds, `127.0.0.1:5000` by default           |
+| `--sat-count`, `--failure-rate`         | the fleet every submission is run against                     |
+| `--collect-timeout`, `--join-timeout`   | same meaning as on the command line                           |
+
+Every submission is a full run: the list is validated, a fleet is spawned, and the summary
+comes back in the right panel. A malformed list is answered with the parser's own message
+and starts no process. One run at a time, so a submission arriving while another is in
+flight is refused rather than queued.
+
+### Run history
+
+With `--db PATH`, every run is recorded and a **history** link appears in the header.
+`/history` lists the recent runs, newest first, each one expandable into the tasks it
+accounted for, with the outcome of each and what was skipped:
+
+```bash
+make web                     # already passes --db runs.db
+sat-task-system --web --db runs.db --tasks data/spec_tasks.json
+```
+
+The file is created on the first run it records. Without `--db` nothing is stored and the
+link is not shown. The schema and the queries are described in
+[`docs/persistence.md`](docs/persistence.md).
+
+In Docker, published on port 5000:
+
+```bash
+make docker-web
+make docker-web PORT=8080
+```
+
+The image records to `/app/history/runs.db`, a directory the container's own user owns, so
+the history works out of the box and is discarded with the container. Mount that directory
+to keep it across runs:
+
+```bash
+docker run --rm --init -p 5000:5000 -v "$PWD/history:/app/history" sat-task-system:web
+```
+
+The host directory has to be writable by the container's user, which is uid 1000. Pass
+`--user "$(id -u)"` if yours differs.
+
+### Without installing
+
+```bash
+make run
+make run ARGS="--sat-count 4"
+```
+
+Extra arguments go through `ARGS`: `make` parses anything starting with `-` as
+its own option before it looks at the target.
+
+### Docker
+
+```bash
+make docker-build
+make docker-run
+make docker-run ARGS="--sat-count 3"
+```
+
+The image ships `data/spec_tasks.json` and runs it by default. To use your own
+list, mount the directory holding it and point `--tasks` at it:
+
+```bash
+docker run --rm --init -v "$PWD:/data:ro" sat-task-system --tasks /data/my_tasks.json
+```
+
+## The task file
+
+A JSON array. Every entry needs the three fields:
+
+```json
+[
+  { "name": "high_res_capture", "payoff": 10.0, "resources": [1, 5] },
+  { "name": "sensor_maintenance", "payoff": 1.0, "resources": [1, 2] },
+  { "name": "comms_test", "payoff": 5.0, "resources": [5, 6] },
+  { "name": "fsck_disk_a", "payoff": 2.0, "resources": [1, 6] }
+]
+```
+
+- `name` — unique, human readable id.
+- `payoff` — what completing the task is worth.
+- `resources` — ids of the exclusive resources it holds. Two tasks sharing a
+  resource id cannot sit in the same satellite's queue.
+
+`data/spec_tasks.json` is the list above; `data/benchmark_tasks.json` is a
+larger one (50 tasks).
+
+## Tests
+
+```bash
+make test          # unit + integration
+make test-slow     # the allocator benchmark, deselected by default
+make test-all      # everything
+make docker-test   # the same suite inside the image, on a clean Python 3.12
+```
+
+## Authoring
+
+The core of the system was designed and written by hand. The webapp and the sql integration
+were implemented with a Claude Code agent, but only after the architecture and interfaces
+had been designed. In particular, the ports-and-adapters structure was an intentional design
+choice made beforehand, precisely because it allowed the implementation of the web UI and
+persistence layer to be delegated without changing the domain or application code.
+
+| part                                                           | design             | code  |
+| -------------------------------------------------------------- | ------------------ | ----- |
+| allocator: the algorithm and its evolution                     | pen and paper      | hand  |
+| domain model and the resource invariant                        | hand               | hand  |
+| IPC: the channels, the envelopes, the bounded collect          | hand               | hand  |
+| the station's five phases and the satellite actors             | hand               | hand  |
+| task loading and payload validation                            | hand               | hand  |
+| ports, and the seam that lets a summary reach several places   | hand               | hand  |
+| the console report and its layout                              | hand               | hand  |
+| configuration, the command line, the container images          | hand               | hand  |
+| unit and integration tests of all of the above                 | both               | both  |
+| documentation of all of the above                              | hand               | both  |
+| `processes/fleet.py`, the mode flags                           | agreed, then agent | agent |
+| web interface                                                  | agent              | agent |
+| SQLite adapter and its schema                                  | hand               | agent |
+| history queries and the history page                           | asked, then agent  | agent |
+| documentation of the two additions                             | agent              | agent |
+
+The port design was deliberately made with this future composition in mind. `Reporter` was
+specified as a terminal, called-once publish operation so that multiple reporting
+implementations could be composed without coupling the caller to any particular
+destination. This meant that a persistent SQLite reporter could be added alongside the
+existing displaying reporter without modifying `GroundStation`.
+
+## Design Decisions
+
+This section summarizes the decisions and the reasoning behind them. The detail lives in
+`docs/`, indexed in [`docs/index.md`](docs/index.md).
+
+### Ports and adapters
+
+The station declares what it needs as two abstract types and nothing more: where a run's
+tasks come from, and where its summary goes. Both front ends are the same core with a
+different pair plugged in.
+
+```mermaid
+flowchart LR
+    jsonSrc["JsonTaskSource<br/>task file"]
+    memSrc["InMemoryTaskSource<br/>request body"]
+
+    src{{"TaskSource"}}
+    GS["GroundStation<br/>schedule · dispatch · collect · report"]
+    rep{{"Reporter"}}
+
+    console["ConsoleReporter<br/>stdout"]
+    multi["MultiReporter"]
+    capture["CapturingReporter<br/>the page"]
+    sqlite["SqliteReporter<br/>runs.db"]
+
+    jsonSrc --- src
+    memSrc --- src
+    src -->|"fetch()"| GS
+    GS -->|"publish()"| rep
+    rep --- console
+    rep --- multi
+    multi --- capture
+    multi --- sqlite
+```
+
+The hexagons are the ports. `JsonTaskSource` and `ConsoleReporter` are the command line
+pair; `InMemoryTaskSource` and the composed reporters are the web one. Adding the web
+interface, and later the run history, changed no line of `GroundStation`: a summary reaching
+both an HTTP response and a database is still one `publish()` call to one object, because
+`MultiReporter` implements the port it holds.
+
+One diagram per mode, and the argument for each adapter, is in
+[`docs/architecture.md`](docs/architecture.md).
+
+### Allocation algorithm
+
+The optimizer was first designed for a fleet of two satellites, and the implementation was
+later expanded to support N. What follows explains the algorithm with two satellites: it is
+the way the problem was originally approached and the clearest one to read. For the full
+detail, see [`docs/allocator.md`](docs/allocator.md).
+
+Given a set of `n` tasks, each with its payoff and its set of mutually exclusive resources,
+and a fleet of two satellites, we are asked for the distribution of tasks that maximizes
+the total payoff with no two tasks sharing a resource on the same satellite. Both decisions
+are coupled: giving a task to a satellite consumes its resources and changes what it can
+still accept, so they cannot be decided one at a time.
+
+Before going into a search, two cases are worth analyzing, because both are answered
+without one:
+
+| case                                          | shortcut                      | cost               |
+| --------------------------------------------- | ----------------------------- | ------------------ |
+| the fleet is as large as the number of tasks  | one task per satellite        | `O(n)`             |
+| every task fits somewhere without conflict     | a greedy pass places them all | `O(n * sat_count)` |
+
+Both collect every task, so there is nothing better to look for.
+
+When neither case applies some task has to be dropped, and choosing which one is the hard
+part. The goal is to maximize the payoff, not to approximate it, so we search for
+the optimum. We build a decision tree with all the possible combinations. Taking the first
+task as the root node of our tree, we go down one level through the following three
+options:
+
+1. No satellite takes the task
+2. The first satellite takes it (if there is no conflict)
+3. The second satellite takes it (if there is no conflict)
+
+Each of these decisions is a new node; then the next task is taken and the same three
+decisions are analyzed again for every node, forming a ternary decision tree of `3^n` nodes.
+
+To find the optimum we followed a dynamic programming approach. We built a function
+`best(task_index, sat1_resources, sat2_resources)` that defines, at each node, the maximum
+payoff obtainable from there downwards:
+
+```python
+def best(i: int, m1: frozenset[int], m2: frozenset[int]) -> float:
+    if i == len(tasks):
+        return 0.0
+
+    t = tasks[i]
+
+    r = best(i + 1, m1, m2)                       # nobody takes it
+
+    if not (t.resources & m1):                    # satellite 1 can take it
+        r = max(r, t.payoff + best(i + 1, m1 | t.resources, m2))
+
+    if not (t.resources & m2):                    # satellite 2 can take it
+        r = max(r, t.payoff + best(i + 1, m1, m2 | t.resources))
+
+    return r
+```
+
+The three branches are the three decisions, `max` keeps the best one, and `t.resources &
+m1` is the conflict test: a non-empty intersection means that satellite cannot take the
+task.
+
+As written, it walks the whole tree. Memoization is what makes it tractable: many decision
+sequences lead to the same state, and how satellite 1 came to hold {1, 5} does not matter,
+only that it holds it, so identical arguments have identical answers and are computed once.
+The cost becomes the number of reachable states instead of the `3^n` paths of the tree.
+`Task.resources` is a `frozenset` and not a `set` precisely so the state can be a dict key.
+
+Two optimizations followed:
+
+1. **Integer bitmasks instead of sets** (`1 << r`), so the conflict test is a single `&` and
+   the state is cheaper to hash. Runtime dropped by almost half.
+
+2. **Symmetric states collapse.** The satellites are interchangeable, so sorting the masks
+   before building the memo key maps mirrored states to a single entry, roughly halving them.
+
+`best()` returns a payoff, but the GroundStation needs to know which task goes where. Since
+every reachable state is already in the memo, a second pass walks the tasks forward and
+follows any branch that reproduces the known optimum, which is a branch the optimum could
+have taken. Every lookup is a memo hit, so the pass is `O(n)`.
+
+Support for N satellites came last: the two masks become a tuple of `sat_count` masks, at
+roughly 1.5x the runtime, which is the price of a configurable fleet size. With a larger
+fleet, placements often tie at the optimum, and the pass keeps the least loaded satellite
+instead of the first one it finds, so batches spread instead of piling onto satellite 0.
+
+#### Limits
+
+With `n` tasks, `R` distinct resources and `N` satellites, a state is a task index plus
+one mask per satellite, so the state space is bounded by `n * (2^R)^N`. Measured for 50
+tasks / 10 resources / 2 satellites takes ~6s, 6.3M calls and ~2.5M memoized states.
+
+#### Reading the evolution
+
+The allocator was committed in stages, from the most naive correct version to the
+current one, and each stage is tagged `stage1`..`stage8`:
+
+```bash
+git log --oneline stage1..stage8
+git show stage3        # sets become bitmasks
+```
+
+### IPC mechanism
+
+Once the optimal assignment is known, the ground station has to hand each satellite its
+share of the work and wait for its results. The station and the satellites are separate
+processes, so a mechanism to communicate between them (IPC) had to be defined.
+
+The initial idea was to reproduce the space links of a real satellite communication: the
+station broadcasts its messages to the whole fleet and each satellite checks whether the
+message received is addressed to it, while each satellite, on finishing its tasks, transmits
+its results individually to a single ground station, which has to tell which satellite each
+result came from.
+
+A PUB/SUB bus, the station publishing, every satellite subscribing, was evaluated for the
+uplink and discarded: a subscriber that joins late loses whatever was published before it
+connected, and having every satellite validate its own id is clumsy work that buys nothing.
+The uplink ended up as one exclusive queue per satellite, with the station holding an array
+of those queues indexed by satellite id. 
+
+The downlink is the opposite, a single queue shared by the whole fleet. Every result carries
+the id of the satellite that produced it, so merging the streams loses nothing, and the
+station simply reads the next message as it arrives instead of polling the satellites one by
+one, which is what per-satellite downlinks would force.
+
+Both links are `multiprocessing.Queue` objects. They give exactly what the design needs:
+dedicated queues for the uplinks, a shared one for the downlink, and process-safe
+operation without implementing explicit mutexes. They come with the standard library, so
+there is no broker to deploy, and they are kept behind a thin wrapper in
+`ipc/channels.py`, so the transport can be replaced without touching the processes.
+
+
+Finally, to keep a missing result from blocking the run forever, the station knows how many
+responses to expect before it dispatches anything, one per assigned task, so collecting is a
+bounded loop rather than a wait for sentinels or a check for live processes. Each read
+carries a configurable timeout, and if it fires with responses still missing, the station
+matches the task names it dispatched against the names that reported back and records the
+outstanding ones as failed. A dead satellite then costs the run its payoff instead of its
+report.
+
+[`docs/ipc.md`](docs/ipc.md) covers the transport in detail: the channel types, the
+addressing constraint, the message envelopes, and the termination path.
