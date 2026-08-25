@@ -1,166 +1,46 @@
-<!doctype html>
-<html lang="en">
+{% extends "base.html" %}
+{% set page = "run" %}
 
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>satellite tasking system</title>
-  <style>
-    :root {
-      --bg: #12151a;
-      --panel: #1a1f27;
-      --line: #2b323d;
-      --text: #d7dde5;
-      --muted: #7c8798;
-      --accent: #5aa9e6;
-      --bad: #e06c75;
-    }
+{% block subtitle %}
+<p class="fleet">{{ sat_count }} satellites &middot; failure rates {{ failure_rates }}</p>
+{% endblock %}
 
-    * {
-      box-sizing: border-box;
-    }
+{% block main %}
+<main>
+  <section>
+    <h2>tasks</h2>
+    <form method="post" id="run">
+      <textarea name="tasks" spellcheck="false"
+        placeholder='[{"name": "high_res_capture", "payoff": 10.0, "resources": [1, 5]}]'>{{ tasks }}</textarea>
+      <button type="submit">run</button>
+    </form>
+  </section>
 
-    body {
-      margin: 0;
-      padding: 2rem;
-      background: var(--bg);
-      color: var(--text);
-      font: 14px/1.5 system-ui, sans-serif;
-    }
+  <section>
+    <h2>report</h2>
+    <div id="report">
+      {% if error %}
+      <pre class="error">{{ error }}</pre>
+      {% elif report %}
+      <pre>{{ report }}</pre>
+      {% else %}
+      <p class="empty">Paste a task list and press run.</p>
+      {% endif %}
+    </div>
+  </section>
+</main>
 
-    header {
-      max-width: 1200px;
-      margin: 0 auto 1.5rem;
-    }
+<script>
+  // The response replaces the whole page, so without this the previous report
+  // stays on screen for the length of the run and reads as the new one.
+  document.getElementById("run").addEventListener("submit", (event) => {
+    document.getElementById("report").innerHTML =
+      '<p class="empty">Running the fleet...</p>';
 
-    h1 {
-      font-size: 1.25rem;
-      margin: 0 0 .25rem;
-    }
-
-    .fleet {
-      color: var(--muted);
-    }
-
-    main {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-      max-width: 1200px;
-      margin: 0 auto;
-      align-items: start;
-    }
-
-    @media (max-width: 900px) {
-      main {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    section {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 1rem;
-    }
-
-    h2 {
-      font-size: .8rem;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: var(--muted);
-      margin: 0 0 .75rem;
-    }
-
-    textarea {
-      width: 100%;
-      height: 26rem;
-      resize: vertical;
-      background: var(--bg);
-      color: var(--text);
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: .75rem;
-      font: 13px/1.5 ui-monospace, monospace;
-    }
-
-    button {
-      margin-top: .75rem;
-      padding: .5rem 1.25rem;
-      background: var(--accent);
-      color: #0d1117;
-      border: 0;
-      border-radius: 6px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    button:disabled {
-      background: var(--line);
-      color: var(--muted);
-      cursor: progress;
-    }
-
-    pre {
-      margin: 0;
-      overflow-x: auto;
-      font: 13px/1.5 ui-monospace, monospace;
-    }
-
-    .error {
-      color: var(--bad);
-      white-space: pre-wrap;
-    }
-
-    .empty {
-      color: var(--muted);
-    }
-  </style>
-</head>
-
-<body>
-  <header>
-    <h1>satellite tasking system</h1>
-    <p class="fleet">{{ sat_count }} satellites &middot; failure rates {{ failure_rates }}</p>
-  </header>
-
-  <main>
-    <section>
-      <h2>tasks</h2>
-      <form method="post" id="run">
-        <textarea name="tasks" spellcheck="false"
-          placeholder='[{"name": "high_res_capture", "payoff": 10.0, "resources": [1, 5]}]'>{{ tasks }}</textarea>
-        <button type="submit">run</button>
-      </form>
-    </section>
-
-    <section>
-      <h2>report</h2>
-      <div id="report">
-        {% if error %}
-        <pre class="error">{{ error }}</pre>
-        {% elif report %}
-        <pre>{{ report }}</pre>
-        {% else %}
-        <p class="empty">Paste a task list and press run.</p>
-        {% endif %}
-      </div>
-    </section>
-  </main>
-
-  <script>
-    // The response replaces the whole page, so without this the previous report
-    // stays on screen for the length of the run and reads as the new one.
-    document.getElementById("run").addEventListener("submit", (event) => {
-      document.getElementById("report").innerHTML =
-        '<p class="empty">Running the fleet...</p>';
-
-      // The server serves one run at a time; this is the same rule, said early.
-      const button = event.target.querySelector("button");
-      button.disabled = true;
-      button.textContent = "running";
-    });
-  </script>
-</body>
-
-</html>
+    // The server serves one run at a time; this is the same rule, said early.
+    const button = event.target.querySelector("button");
+    button.disabled = true;
+    button.textContent = "running";
+  });
+</script>
+{% endblock %}
