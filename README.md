@@ -40,6 +40,29 @@ flowchart LR
 Requires Python 3.12+. The system itself has no runtime dependencies; the optional
 [web interface](#web-interface) adds Flask.
 
+## Features
+
+- **Exact allocation** Dynamic programming over resource bitmasks returns the maximum
+  achievable payoff, with two shortcuts that answer the easy shapes in linear time.
+  Measured limits are in [Design Decisions](#allocation-algorithm).
+- **Fleet size configurable at startup.** Any `N >= 2`, each satellite a process of its
+  own, with an execution failure probability that can be set per satellite.
+- **Load spread across the fleet.** When several placements tie at the optimum, the
+  allocator keeps the one that leaves the fleet most evenly loaded.
+- **Task lists from outside the code.** A JSON file, or a list submitted through the web
+  page. Every entry is validated, and a rejection names the offending field.
+- **No shared state and no locks.** Resource exclusivity is decided before execution, so
+  the processes only exchange messages over queues.
+- **Bounded collection.** The station knows how many results to expect before it dispatches
+  anything, and every read carries a timeout, so a satellite that dies costs the run its
+  payoff instead of its report.
+- **Two front ends over the same core.** A command line run that prints the report, and a
+  web page that runs one fleet per submission. The task source and the reporter are ports,
+  so neither the allocator nor the processes know which one is in play.
+- **Tested and containerized.** Unit tests down to each phase of the station, an
+  integration pass over the whole chain, an allocator benchmark, and images for running
+  the fleet, the suite, or the web interface.
+
 ## The problem
 
 A task has a `payoff` and a set of exclusive resource ids. A satellite cannot hold two
@@ -236,7 +259,7 @@ without one:
 Both collect every task, so there is nothing better to look for.
 
 When neither case applies some task has to be dropped, and choosing which one is the hard
-part. The exercise asks to maximize the payoff, not to approximate it, so we search for
+part. The goal is to maximize the payoff, not to approximate it, so we search for
 the optimum. We build a decision tree with all the possible combinations. Taking the first
 task as the root node of our tree, we go down one level through the following three
 options:
@@ -317,9 +340,8 @@ git show stage3        # sets become bitmasks
 ### IPC mechanism
 
 Once the optimal assignment is known, the ground station has to hand each satellite its
-share of the work and wait for its results. The exercise requires the station and the
-satellites to be separate processes, so a mechanism to communicate between them (IPC) had to
-be defined.
+share of the work and wait for its results. The station and the satellites are separate
+processes, so a mechanism to communicate between them (IPC) had to be defined.
 
 The initial idea was to reproduce the space links of a real satellite communication: the
 station broadcasts its messages to the whole fleet and each satellite checks whether the
