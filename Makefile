@@ -28,7 +28,8 @@ run:
 
 # Needs the optional dependency: pip install '.[web]'
 web:
-	$(PYTHON) -m sat_task_system.main --web --tasks data/spec_tasks.json $(ARGS)
+	$(PYTHON) -m sat_task_system.main --web --tasks data/spec_tasks.json \
+	          --db runs.db $(ARGS)
 
 docker-build:
 	docker build -t $(IMAGE) .
