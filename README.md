@@ -263,15 +263,35 @@ make docker-test   # the same suite inside the image, on a clean Python 3.12
 
 ## Authoring
 
-The web interface was written by [Claude Code](https://claude.com/claude-code), an AI
-agent, working from a design agreed beforehand: `src/sat_task_system/web/`, the fleet
-orchestration in `processes/fleet.py`, the two port adapters it needed
-(`CapturingReporter`, `InMemoryTaskSource`), the extraction of `reporting/text_report.py`,
-and the mode flags in `config.py` and `main.py`.
+The core of the system was designed and written by hand. The webapp and the sql integration
+were implemented with a Claude Code agent, but only after the architecture and interfaces
+had been designed. In particular, the ports-and-adapters structure was an intentional design
+choice made beforehand, precisely because it allowed the implementation of the web UI and
+persistence layer to be delegated without changing the domain or application code.
 
-Everything else was written by hand, with the agent used for design discussion and review:
-the allocator and its documentation, the domain model, the IPC layer, both processes, the
-loaders and the reporting.
+| part                                                           | design             | code  |
+| -------------------------------------------------------------- | ------------------ | ----- |
+| allocator: the algorithm and its evolution                     | pen and paper      | hand  |
+| domain model and the resource invariant                        | hand               | hand  |
+| IPC: the channels, the envelopes, the bounded collect          | hand               | hand  |
+| the station's five phases and the satellite actors             | hand               | hand  |
+| task loading and payload validation                            | hand               | hand  |
+| ports, and the seam that lets a summary reach several places   | hand               | hand  |
+| the console report and its layout                              | hand               | hand  |
+| configuration, the command line, the container images          | hand               | hand  |
+| unit and integration tests of all of the above                 | both               | both  |
+| documentation of all of the above                              | hand               | both  |
+| `processes/fleet.py`, the mode flags                           | agreed, then agent | agent |
+| web interface                                                  | agent              | agent |
+| SQLite adapter and its schema                                  | hand               | agent |
+| history queries and the history page                           | asked, then agent  | agent |
+| documentation of the two additions                             | agent              | agent |
+
+The port design was deliberately made with this future composition in mind. `Reporter` was
+specified as a terminal, called-once publish operation so that multiple reporting
+implementations could be composed without coupling the caller to any particular
+destination. This meant that a persistent SQLite reporter could be added alongside the
+existing displaying reporter without modifying `GroundStation`.
 
 ## Design Decisions
 
