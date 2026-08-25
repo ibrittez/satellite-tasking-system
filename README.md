@@ -37,7 +37,8 @@ flowchart LR
     dn --> GS
 ```
 
-Requires Python 3.12+. There are no runtime dependencies.
+Requires Python 3.12+. The system itself has no runtime dependencies; the optional
+[web interface](#web-interface) adds Flask.
 
 ## The problem
 
@@ -69,13 +70,13 @@ explained in [Design Decisions](#design-decisions) section.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install .
+pip install .          # pip install '.[web]' to get the web interface too
 ```
 
 ## Usage
 
-The install puts a `sat-task-system` command on your PATH. `--tasks` is
-required; `--sat-count` defaults to 2:
+The install puts a `sat-task-system` command on your PATH. It runs one batch and prints
+the report; `--tasks` is required in this mode and `--sat-count` defaults to 2:
 
 ```bash
 sat-task-system --tasks data/spec_tasks.json
@@ -91,6 +92,7 @@ A run prints the configuration it resolved, then the summary:
 
 ```
 sat-task-system
+  mode              cli
   tasks             data/spec_tasks.json
   satellites        2
   failure rates     0.10, 0.10
@@ -114,6 +116,41 @@ planned 16.0   achieved 11.0   (2 of 3 succeeded)
 
 `planned` is what the allocation was worth, `achieved` what survived execution:
 each task fails with its satellite's `--failure-rate`, so the two rarely match.
+
+### Web interface
+
+`--web` serves a page instead of running once: paste a task list on the left, press run,
+read the report on the right. It is the same report the command line prints, produced by
+the same fleet. Flask is not a runtime dependency, so it comes as an extra:
+
+```bash
+pip install '.[web]'
+
+sat-task-system --web                                    # empty box
+sat-task-system --web --tasks data/spec_tasks.json       # box opens prefilled
+sat-task-system --web --port 8080 --sat-count 4 --failure-rate 0.0
+```
+
+Then open <http://127.0.0.1:5000>.
+
+| flag                                    | meaning in web mode                                          |
+| --------------------------------------- | ------------------------------------------------------------ |
+| `--tasks`                               | optional, and only the initial content of the box             |
+| `--host`, `--port`                      | where the server binds, `127.0.0.1:5000` by default           |
+| `--sat-count`, `--failure-rate`         | the fleet every submission is run against                     |
+| `--collect-timeout`, `--join-timeout`   | same meaning as on the command line                           |
+
+Every submission is a full run: the list is validated, a fleet is spawned, and the summary
+comes back in the right panel. A malformed list is answered with the parser's own message
+and starts no process. One run at a time, so a submission arriving while another is in
+flight is refused rather than queued.
+
+In Docker, published on port 5000:
+
+```bash
+make docker-web
+make docker-web PORT=8080
+```
 
 ### Without installing
 
