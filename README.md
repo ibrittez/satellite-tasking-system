@@ -1,11 +1,68 @@
 # `satellite-tasking-system`
 
-A GroundStation reads a task list from an external file, allocates the tasks
-across a fleet of Satellites so that total payoff is maximized, and each
-satellite executes its batch in its own OS process. Results travel back to the
-GroundStation, which prints a summary.
+Given a set of tasks, each with a payoff and a set of mutually exclusive resources, and a
+fleet of `N` satellites, it computes the assignment that maximizes total payoff, then
+executes it.
+
+A GroundStation reads the task list from an external file, allocates it, and dispatches
+one batch per satellite. Each satellite runs in its own OS process, executes its batch and
+reports back. The GroundStation prints a summary.
+
+```mermaid
+flowchart LR
+    main["main.py<br/>creates queues · spawn · join"]
+
+    src[/"TaskSource"/]
+    GS["GroundStation<br/>fetch → schedule → dispatch<br/>→ collect → report"]
+    rep[/"Reporter"/]
+
+    u0[["uplink[0]"]]
+    u1[["uplink[1]"]]
+    dn[["downlink (shared)"]]
+
+    sat0["sat0"]
+    sat1["sat1"]
+
+    main -.->|spawn| GS
+    main -.->|spawn| sat0
+    main -.->|spawn| sat1
+
+    src --> GS
+    GS --> rep
+
+    GS --> u0 --> sat0
+    GS --> u1 --> sat1
+    sat0 --> dn
+    sat1 --> dn
+    dn --> GS
+```
 
 Requires Python 3.12+. There are no runtime dependencies.
+
+## The problem
+
+A task has a `payoff` and a set of exclusive resource ids. A satellite cannot hold two
+tasks sharing a resource id; the constraint is per satellite, so two tasks sharing a
+resource can still both run if they go to different satellites.
+
+Given `N` satellites, choose which tasks run and on which satellite so that the total
+payoff of the tasks that run is maximum. Tasks that fit nowhere are dropped.
+
+With two satellites:
+
+| task                 | payoff | resources |
+| -------------------- | ------ | --------- |
+| `high_res_capture`   | 10     | {1, 5}    |
+| `sensor_maintenance` | 1      | {1, 2}    |
+| `comms_test`         | 5      | {5, 6}    |
+| `fsck_disk_a`        | 2      | {1, 6}    |
+
+Optimum is 16: `high_res_capture` on one satellite, `sensor_maintenance` + `comms_test` on
+the other. `fsck_disk_a` is dropped; any allocation including it is worth at most 12.
+
+Execution is simulated: each task fails with a configurable probability, so the achieved
+payoff is usually below the planned one. The designed algorithm is
+explained in [Design Decisions](#design-decisions) section.
 
 ## Install
 
