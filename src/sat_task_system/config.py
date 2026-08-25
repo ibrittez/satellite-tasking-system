@@ -17,6 +17,18 @@ FAILURE_RATE = 0.10
 COLLECT_TIMEOUT = 5.0
 JOIN_TIMEOUT = 5.0
 
+# The two ways to drive the same fleet: a single run on the command line, or a
+# server that runs one batch per submission.
+MODE_CLI = "cli"
+MODE_WEB = "web"
+MODES = (MODE_CLI, MODE_WEB)
+
+HOST = "127.0.0.1"
+PORT = 5000
+
+MIN_PORT = 1
+MAX_PORT = 65535
+
 
 # =======================================
 # config
@@ -27,13 +39,29 @@ JOIN_TIMEOUT = 5.0
 class Config:
     """Runtime configuration"""
 
-    tasks_path: str
+    tasks_path: str | None
     sat_count: int
     failure_rates: tuple[float, ...]
     collect_timeout: float
     join_timeout: float
+    mode: str = MODE_CLI
+    host: str = HOST
+    port: int = PORT
 
     def __post_init__(self) -> None:
+        if self.mode not in MODES:
+            raise ValueError(
+                f"mode must be one of {', '.join(MODES)}, got '{self.mode}'")
+
+        # A command line run has no other way to be told what to run. Web mode
+        # takes its tasks from the request, so a path there is only a prefill.
+        if self.mode == MODE_CLI and self.tasks_path is None:
+            raise ValueError(f"tasks_path is required in {MODE_CLI} mode")
+
+        if not MIN_PORT <= self.port <= MAX_PORT:
+            raise ValueError(
+                f"port must be in [{MIN_PORT}, {MAX_PORT}], got {self.port}")
+
         if self.sat_count < MIN_SAT_COUNT:
             raise ValueError(
                 f"sat_count must be at least {MIN_SAT_COUNT}, got {self.sat_count}")
@@ -63,14 +91,18 @@ class Config:
     @override
     def __str__(self) -> str:
         """Startup banner. Built as one string so it lands in a single write."""
-        rows = (
-            ("tasks", self.tasks_path),
+        rows = [
+            ("mode", self.mode),
+            ("tasks", self.tasks_path or "none"),
             ("satellites", str(self.sat_count)),
             ("failure rates", ", ".join(
                 f"{rate:.2f}" for rate in self.failure_rates)),
             ("collect timeout", f"{self.collect_timeout}s"),
             ("join timeout", f"{self.join_timeout}s"),
-        )
+        ]
+
+        if self.mode == MODE_WEB:
+            rows.insert(1, ("listening on", f"http://{self.host}:{self.port}"))
 
         return "\n".join(
             [PROG, *(f"  {label:<18}{value}" for label, value in rows)])
@@ -90,16 +122,19 @@ def parse_config(argv: Sequence[str] | None = None) -> Config:
 
     # Annotated locals on purpose: Namespace attributes are Any, and pinning
     # them here is what keeps the type checker honest at the boundary.
-    tasks_path: str = args.tasks
+    tasks_path: str | None = args.tasks
     sat_count: int = args.sat_count
     failure_rates: Sequence[float] = args.failure_rate
     collect_timeout: float = args.collect_timeout
     join_timeout: float = args.join_timeout
+    mode: str = args.mode
+    host: str = args.host
+    port: int = args.port
 
     try:
         return Config(tasks_path, sat_count,
                       _expand_rates(failure_rates, sat_count),
-                      collect_timeout, join_timeout)
+                      collect_timeout, join_timeout, mode, host, port)
     except ValueError as error:
         parser.error(str(error))
 
@@ -114,18 +149,56 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=PROG,
         description="Run a satellite fleet against a constrained task list maximizing payoff.",
-        epilog=f"example: {PROG} --tasks data/spec_tasks.json --sat-count 3 "
-               f"--failure-rate 0.1 0.2 0.0",
+        epilog=f"examples:\n"
+               f"  {PROG} --tasks data/spec_tasks.json --sat-count 3 "
+               f"--failure-rate 0.1 0.2 0.0\n"
+               f"  {PROG} --web --tasks data/spec_tasks.json",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    # Required on purpose: an installed package has no repo tree to default to,
-    # so each context (Makefile, Dockerfile) declares its own path.
+    # Not `required`, because web mode does not need it: Config is what rejects
+    # a cli run without a path, so the rule lives with the other rules.
     _ = parser.add_argument(
         "--tasks",
-        required=True,
+        default=None,
         metavar="PATH",
-        help="JSON file holding the task list",
+        help=f"JSON file holding the task list; required in {MODE_CLI} mode, "
+             f"and the box prefill in {MODE_WEB} mode",
+    )
+
+    mode = parser.add_mutually_exclusive_group()
+
+    _ = mode.add_argument(
+        "--cli",
+        dest="mode",
+        action="store_const",
+        const=MODE_CLI,
+        help="run one batch and print the report (default)",
+    )
+
+    _ = mode.add_argument(
+        "--web",
+        dest="mode",
+        action="store_const",
+        const=MODE_WEB,
+        help="serve a page that runs one batch per submission",
+    )
+
+    parser.set_defaults(mode=MODE_CLI)
+
+    _ = parser.add_argument(
+        "--host",
+        default=HOST,
+        metavar="ADDRESS",
+        help=f"address the {MODE_WEB} mode binds to (default: {HOST})",
+    )
+
+    _ = parser.add_argument(
+        "--port",
+        type=int,
+        default=PORT,
+        metavar="PORT",
+        help=f"port the {MODE_WEB} mode listens on (default: {PORT})",
     )
 
     _ = parser.add_argument(
