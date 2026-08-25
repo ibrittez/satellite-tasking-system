@@ -266,6 +266,45 @@ make docker-test   # the same suite inside the image, on a clean Python 3.12
 This section summarizes the decisions and the reasoning behind them. The detail lives in
 `docs/`, indexed in [`docs/index.md`](docs/index.md).
 
+### Ports and adapters
+
+The station declares what it needs as two abstract types and nothing more: where a run's
+tasks come from, and where its summary goes. Both front ends are the same core with a
+different pair plugged in.
+
+```mermaid
+flowchart LR
+    jsonSrc["JsonTaskSource<br/>task file"]
+    memSrc["InMemoryTaskSource<br/>request body"]
+
+    src{{"TaskSource"}}
+    GS["GroundStation<br/>schedule · dispatch · collect · report"]
+    rep{{"Reporter"}}
+
+    console["ConsoleReporter<br/>stdout"]
+    multi["MultiReporter"]
+    capture["CapturingReporter<br/>the page"]
+    sqlite["SqliteReporter<br/>runs.db"]
+
+    jsonSrc --- src
+    memSrc --- src
+    src -->|"fetch()"| GS
+    GS -->|"publish()"| rep
+    rep --- console
+    rep --- multi
+    multi --- capture
+    multi --- sqlite
+```
+
+The hexagons are the ports. `JsonTaskSource` and `ConsoleReporter` are the command line
+pair; `InMemoryTaskSource` and the composed reporters are the web one. Adding the web
+interface, and later the run history, changed no line of `GroundStation`: a summary reaching
+both an HTTP response and a database is still one `publish()` call to one object, because
+`MultiReporter` implements the port it holds.
+
+One diagram per mode, and the argument for each adapter, is in
+[`docs/architecture.md`](docs/architecture.md).
+
 ### Allocation algorithm
 
 The optimizer was first designed for a fleet of two satellites, and the implementation was

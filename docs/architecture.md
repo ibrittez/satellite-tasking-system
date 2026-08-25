@@ -164,6 +164,77 @@ The station holds the abstract types, so a different source of tasks or a differ
 destination for the summary is a new class plus one line of wiring, with no change to the
 orchestration. Adding the second front end changed no line of `GroundStation`.
 
+## The same core, wired twice
+
+Command line mode:
+
+```mermaid
+flowchart LR
+    entry(["main.py --cli"])
+
+    subgraph core["core"]
+        GS["GroundStation"]
+        alloc["allocate · build_summary"]
+        GS --- alloc
+    end
+
+    src{{"TaskSource"}}
+    rep{{"Reporter"}}
+
+    json["JsonTaskSource"]
+    file[("task file")]
+    console["ConsoleReporter"]
+    out[/"stdout"/]
+
+    entry ==>|"run()"| GS
+    GS -->|"fetch()"| src
+    GS -->|"publish()"| rep
+
+    src --- json --- file
+    rep --- console --- out
+```
+
+Web mode:
+
+```mermaid
+flowchart LR
+    entry(["POST /"])
+
+    subgraph core["core"]
+        GS["GroundStation"]
+        alloc["allocate · build_summary"]
+        GS --- alloc
+    end
+
+    src{{"TaskSource"}}
+    rep{{"Reporter"}}
+
+    mem["InMemoryTaskSource"]
+    body[/"request body"/]
+    multi["MultiReporter"]
+    capture["CapturingReporter"]
+    sqlite["SqliteReporter"]
+    page[/"the page"/]
+    db[("runs.db")]
+
+    entry ==>|"run_batch()"| GS
+    GS -->|"fetch()"| src
+    GS -->|"publish()"| rep
+
+    src --- mem --- body
+    rep --- multi
+    multi --- capture --- page
+    multi --- sqlite --- db
+```
+
+The hexagons are the ports, and they are the same two in both drawings. Everything that
+changed between the two front ends is outside them: what drives the run, where the tasks
+come from, and where the summary goes.
+
+The right hand side of the second diagram is what the port contract buys. `MultiReporter`
+implements `Reporter` and holds `Reporter`s, so one run reaches the response and the
+database at once while the station still publishes once, to one object, exactly as before.
+See `docs/persistence.md`.
 
 Both edges are abstract classes rather than injected callables for a concrete reason: on a
 command line run the station runs in a child process, so under the `spawn` start method it
