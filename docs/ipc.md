@@ -1,8 +1,8 @@
 # IPC
 
-Scope: the transport between the ground station process and the satellite processes.
-The allocation algorithm is covered in `docs/allocator.md`; the rest of the design in
-`docs/architecture.md`.
+Scope: the transport between the ground station and the satellite processes. The allocation
+algorithm is covered in `docs/allocator.md`, the rest of the design in
+`docs/architecture.md`, and the front end that hosts the station itself in `docs/web.md`.
 
 ## Requirements
 
@@ -161,7 +161,8 @@ failed one, and its payoff is correctly excluded from the achieved total. The co
 invariant that `build_summary` relies on stays intact, so a partial run reports instead of
 raising.
 
-Teardown then joins each process with a timeout and terminates whatever is still blocked:
+Teardown is `shutdown()` in `processes/fleet.py`, shared by both front ends: it joins each
+process with a timeout and terminates whatever is still blocked.
 
 ```python
 for process in processes:
@@ -171,6 +172,9 @@ for process in processes:
         process.terminate()
         process.join()
 ```
+
+A front end that hosts the station calls it from a `finally`, so a station raising mid run
+cannot leave satellites blocked on their uplinks for the lifetime of the server.
 
 Draining before joining is the required order for `multiprocessing` queues. A process that
 wrote to a queue does not exit until its feeder thread flushes the pickled bytes into the

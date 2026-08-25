@@ -1,7 +1,8 @@
 # Architecture
 
 Scope: process topology, layering, the actors and the two injected edges. The allocation
-algorithm is covered in `docs/allocator.md`, the transport in `docs/ipc.md`.
+algorithm is covered in `docs/allocator.md`, the transport in `docs/ipc.md`, the HTTP front
+end in `docs/web.md`.
 
 ## Execution path
 
@@ -44,15 +45,17 @@ neither is hardcoded into the station.
 
 ## Layering
 
-| package      | role                      | may import                |
-| ------------ | ------------------------- | ------------------------- |
-| `domain/`    | pure business logic       | nothing from this project |
-| `ports/`     | the two abstract edges    | `domain/`                 |
-| `loaders/`   | task input adapters       | `domain/`, `ports/`       |
-| `reporting/` | summary output adapters   | `domain/`, `ports/`       |
-| `ipc/`       | transport mechanism       | `domain/`                 |
-| `processes/` | the actors, orchestration | all of the above          |
-| `main.py`    | composition root          | all of the above          |
+| package      | role                       | may import                    |
+| ------------ | -------------------------- | ----------------------------- |
+| `domain/`    | pure business logic        | nothing from this project     |
+| `ports/`     | the two abstract edges     | `domain/`                     |
+| `loaders/`   | task input adapters        | `domain/`, `ports/`           |
+| `reporting/` | summary output adapters    | `domain/`, `ports/`           |
+| `ipc/`       | transport mechanism        | `domain/`                     |
+| `config.py`  | runtime configuration      | nothing from this project     |
+| `processes/` | the actors, orchestration  | all of the above              |
+| `web/`       | HTTP front end             | all of the above              |
+| `main.py`    | entry point, mode dispatch | all of the above              |
 
 Every dependency points inward. `domain/allocator.py`, `domain/models.py` and
 `domain/summary.py` import nothing but the standard library, which is why the allocation
@@ -64,16 +67,25 @@ does not know how tasks arrive or where results go, is carried by the import rul
 
 ## Process topology
 
-Three roles, four processes: `main.py` is a launcher, and the station runs in a process of
-its own alongside the satellites.
+Three roles, four processes on a command line run: `main.py` is a launcher, and the station
+runs in a process of its own alongside the satellites.
 
 The station is a process rather than the launcher itself so that its lifetime is independent
 of the program's. An entry point cannot outlive the run it starts, while a process can keep
 serving batches for as long as its task source produces them. Keeping the two separate means
 the station's lifetime is a property of the station and not of the process tree.
 
-Queue creation is centralized in `main.py` for a constraint of the primitive, documented in
-`docs/ipc.md`: queues reach a child only by being passed to the `Process` constructor.
+`processes/fleet.py` holds what is common to every run: `satellite_processes()` builds one
+`Process` per satellite from the failure rates, and `shutdown()` joins each with a timeout
+and terminates whatever did not come back.
+
+The station is hosted, not fixed to a process of its own. The HTTP front end hosts it in the
+server process, which is what lets a request read the summary of the run it started; the
+satellites are processes either way. That variant is documented in `docs/web.md`.
+
+Queue creation happens in whichever module composes the run, for a constraint of the
+primitive documented in `docs/ipc.md`: queues reach a child only by being passed to the
+`Process` constructor.
 
 ## GroundStation
 
@@ -126,8 +138,8 @@ class Reporter(ABC):
     def publish(self, summary: Summary) -> None: ...
 ```
 
-`main.py` is the only module that names a concrete pair, so changing either end is a change
-to the wiring and nothing else:
+A concrete pair is named only where a run is composed, so changing either end is a change to
+the wiring and nothing else:
 
 ```python
 station = GroundStation(
@@ -139,14 +151,22 @@ station = GroundStation(
 )
 ```
 
+There are two such places, one per front end, and the pair is the only difference between
+them:
+
+| edge         | command line        | HTTP                   |
+| ------------ | ------------------- | ---------------------- |
+| `TaskSource` | `JsonTaskSource`    | `InMemoryTaskSource`   |
+| `Reporter`   | `ConsoleReporter`   | `CapturingReporter`    |
+
 The station holds the abstract types, so a different source of tasks or a different
 destination for the summary is a new class plus one line of wiring, with no change to the
-orchestration. Nothing in the station constrains how many destinations a `Reporter` writes
+orchestration. Adding the second front end changed no line of `GroundStation`. Nothing in the station constrains how many destinations a `Reporter` writes
 to either, since a `Reporter` that forwards to other reporters satisfies the same contract.
 
-Both edges are abstract classes rather than injected callables for a concrete reason: the
-station runs in a child process, so under the `spawn` start method it is pickled together
-with whatever was injected into it. A class holding a path string pickles cleanly, a lambda
+Both edges are abstract classes rather than injected callables for a concrete reason: on a
+command line run the station runs in a child process, so under the `spawn` start method it
+is pickled together with whatever was injected into it. A class holding a path string pickles cleanly, a lambda
 does not pickle at all. Abstract classes also allow shared implementation, for example a
 base `publish()` that formats a `Summary` and leaves only the destination to subclasses.
 
@@ -171,7 +191,7 @@ batch and exits: no second wave is sent, so there is no receive loop and no shut
 to interpret. Both would be local to this class.
 
 `Satellite` is a plain class composed with a process, `Process(target=sat.run)` in
-`main.py`, rather than a `Process` subclass. Keeping the two separate means `run()` can be
+`processes/fleet.py`, rather than a `Process` subclass. Keeping the two separate means `run()` can be
 called directly in a test with ordinary `queue.Queue` objects, with no `start()`/`join()`
 and no process teardown. It also keeps the promise `ipc/` exists to make: the actor does not
 know what the transport is.
