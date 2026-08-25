@@ -47,6 +47,9 @@ docker-web:
 	docker run --rm --init -p $(PORT):5000 $(IMAGE):web $(ARGS)
 
 clean:
+	# setuptools never prunes build/, so a module deleted from src/ survives
+	# there and ships in the next wheel.
+	rm -rf build
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	find . -type d -name "sat_task_system.egg-info" -exec rm -rf {} +
